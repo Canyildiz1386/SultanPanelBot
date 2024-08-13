@@ -15,7 +15,7 @@ languages = {
     "🇮🇷 فارسی": "fa"
 }
 
-admin_usernames = ["Canyildiz13816", "followergir_support"]
+admin_usernames = ["Canyildiz1386", "followergir_support"]
 
 Base = declarative_base()
 
@@ -37,6 +37,7 @@ class User(Base):
     referral_credit = Column(Integer, default=0)
     sub_transaction_earnings = Column(Integer, default=0)
     last_chance_time = Column(DateTime, default=lambda: datetime.now(timezone.utc) - timedelta(days=1))
+    referrer_id = Column(Integer, nullable=True)
 
 class AgencyRequest(Base):
     __tablename__ = 'agency_requests'
@@ -53,6 +54,12 @@ class Ticket(Base):
     description = Column(String)
     status = Column(String, default='open')
 
+class DiscountCode(Base):
+    __tablename__ = 'discount_codes'
+    id = Column(Integer, primary_key=True)
+    code = Column(String, unique=True, nullable=False)
+    discount_percent = Column(Integer, nullable=False)
+
 engine = create_engine('sqlite:///telegram_bot.db')
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
@@ -64,6 +71,14 @@ def translate_text(text, target_language):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
+    referrer_id = None
+
+    if context.args:
+        try:
+            referrer_id = int(context.args[0])
+        except ValueError:
+            pass
+
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
     if not user:
@@ -76,10 +91,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             profile_url=f'https://unavatar.io/telegram/{update.effective_user.username}',
             is_premium=update.effective_user.is_premium,
             is_bot=update.effective_user.is_bot,
-            is_admin=is_admin
+            is_admin=is_admin,
+            referrer_id=referrer_id
         )
         session.add(new_user)
         session.commit()
+
+        if referrer_id:
+            referrer = session.query(User).filter_by(num_id=referrer_id).first()
+            if referrer:
+                referrer.remaining_credit += 10  # Credit to referrer
+                new_user.remaining_credit += 10  # Credit to new user
+                session.commit()
+                await context.bot.send_message(
+                    chat_id=referrer.num_id,
+                    text=f"🎉 Your referral has been successful! You and {new_user.username} have both received 10 credits."
+                )
 
         await context.bot.send_message(
             chat_id=NOTIFICATION_CHANNEL_ID,
@@ -102,17 +129,27 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     settings_button = translate_text("⚙️ Settings", user.preferred_language)
     chance_circle_button = translate_text("🎯 Chance Circle", user.preferred_language)
     ticket_button = translate_text("🎫 Create Ticket", user.preferred_language)
+    referral_link_button = translate_text("🔗 Referral Link", user.preferred_language)
+    increment_credit_button = translate_text("💳 Increase Credit", user.preferred_language)
 
     if user.is_admin:
         account_info_button = translate_text("ℹ️ Account Information", user.preferred_language)
         view_agencies_button = translate_text("📊 View Agency Requests", user.preferred_language)
         view_tickets_button = translate_text("🎟️ View Tickets", user.preferred_language)
+        admin_management_button = translate_text("🔧 Admin Management", user.preferred_language)
+        manage_off_codes_button = translate_text("🔧 Manage Off Codes", user.preferred_language)
+        broadcast_button = translate_text("📢 Broadcast Message", user.preferred_language)
         keyboard = [
             [InlineKeyboardButton(account_info_button, callback_data="account_info")],
             [InlineKeyboardButton(view_agencies_button, callback_data="view_agency_requests")],
             [InlineKeyboardButton(view_tickets_button, callback_data="view_tickets")],
             [InlineKeyboardButton(settings_button, callback_data="settings")],
-            [InlineKeyboardButton(chance_circle_button, callback_data="chance_circle")]
+            [InlineKeyboardButton(chance_circle_button, callback_data="chance_circle")],
+            [InlineKeyboardButton(referral_link_button, callback_data="referral_link")],
+            [InlineKeyboardButton(increment_credit_button, callback_data="increment_credit")],
+            [InlineKeyboardButton(admin_management_button, callback_data="admin_management")],
+            [InlineKeyboardButton(manage_off_codes_button, callback_data="manage_off_codes")],
+            [InlineKeyboardButton(broadcast_button, callback_data="broadcast_message")]
         ]
     else:
         account_info_button = translate_text("ℹ️ Account Information", user.preferred_language)
@@ -122,7 +159,9 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
             [InlineKeyboardButton(request_agency_button, callback_data="request_agency")],
             [InlineKeyboardButton(settings_button, callback_data="settings")],
             [InlineKeyboardButton(chance_circle_button, callback_data="chance_circle")],
-            [InlineKeyboardButton(ticket_button, callback_data="create_ticket")]
+            [InlineKeyboardButton(ticket_button, callback_data="create_ticket")],
+            [InlineKeyboardButton(referral_link_button, callback_data="referral_link")],
+            [InlineKeyboardButton(increment_credit_button, callback_data="increment_credit")]
         ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -146,8 +185,8 @@ async def safe_edit_message_text(update: Update, context: ContextTypes.DEFAULT_T
         current_message = update.callback_query.message.text
         if current_message != new_text:
             await update.callback_query.message.edit_text(text=new_text, reply_markup=reply_markup)
-    except telegram.error.BadRequest as e:
-        if str(e) != "Message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message":
+    except Exception as e:
+        if "Message is not modified" not in str(e):
             raise
 
 async def handle_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -264,10 +303,6 @@ async def handle_sales_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         await update.message.reply_text(confirmation_text)
 
-        await asyncio.sleep(2)
-
-        await show_main_menu(update, context, user)
-
         for admin in session.query(User).filter_by(is_admin=True).all():
             await context.bot.send_message(
                 chat_id=admin.num_id,
@@ -371,7 +406,7 @@ async def handle_create_ticket(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
-    await query.message.reply_text(translate_text("Please enter the title of your ticket:", user.preferred_language))
+    await query.edit_message_text(translate_text("Please enter the title of your ticket:", user.preferred_language))
     context.user_data['awaiting_ticket_title'] = True
     context.user_data['awaiting_ticket_description'] = False
     session.close()
@@ -386,7 +421,6 @@ async def handle_ticket_title(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data['awaiting_ticket_title'] = False
         context.user_data['awaiting_ticket_description'] = True
     session.close()
-
 
 async def handle_ticket_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
@@ -433,7 +467,7 @@ async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE)
   
     if admin:
         try:
-            action, ticket_id = query.data.split('_', 1)  # Only split into two parts
+            action, ticket_id = query.data.split('_', 1)
         except ValueError:
             await query.message.reply_text("Invalid data received, please try again.")
             return
@@ -446,7 +480,6 @@ async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE)
             context.user_data['awaiting_ticket_response'] = True
 
     session.close()
-
 
 async def handle_ticket_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
@@ -466,22 +499,79 @@ async def handle_ticket_response(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text("✅ The ticket has been closed and the response has been sent to the user.")
         
         context.user_data['awaiting_ticket_response'] = False
-    
+
     session.close()
 
-async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
-    if context.user_data.get('awaiting_ticket_title'):
-        # Handle ticket title
+    # Handle the addition of the off code
+    if context.user_data.get('awaiting_off_code'):
+        off_code = update.message.text.strip()
+        context.user_data['off_code'] = off_code
+        await update.message.reply_text(translate_text("Please enter the discount percent (e.g., 20):", user.preferred_language))
+        context.user_data['awaiting_off_code'] = False
+        context.user_data['awaiting_discount_percent'] = True
+
+    elif context.user_data.get('awaiting_discount_percent'):
+        discount_percent = int(update.message.text.strip())
+        off_code = context.user_data.get('off_code')
+        new_code = DiscountCode(code=off_code, discount_percent=discount_percent)
+        session.add(new_code)
+        session.commit()
+
+        await update.message.reply_text(f"✅ Discount code {off_code} with {discount_percent}% discount has been added.")
+        context.user_data['awaiting_discount_percent'] = False
+        context.user_data['off_code'] = None
+
+    # Handle the request for agency daily sales input
+    elif context.user_data.get('awaiting_sales_input'):
+        daily_sales = update.message.text
+        new_request = AgencyRequest(user_id=user.id, daily_sales=daily_sales)
+        session.add(new_request)
+        session.commit()
+
+        request_id = new_request.id
+        confirmation_text = translate_text(f"✅ Your request has been added. Admins will review it soon. Your request ID: #{request_id} 🎉", user.preferred_language)
+        await update.message.reply_text(confirmation_text)
+
+        for admin in session.query(User).filter_by(is_admin=True).all():
+            await context.bot.send_message(
+                chat_id=admin.num_id,
+                text=f"📩 New agency request from @{user.username}:\n\n💼 Daily Sales: {daily_sales}\n🆔 Request ID: #{request_id}"
+            )
+
+        context.user_data['awaiting_sales_input'] = False
+
+    # Handle other message scenarios (like handling discount code input, etc.)
+    elif context.user_data.get('awaiting_discount_code'):
+        discount_code = update.message.text.strip()
+        discount = session.query(DiscountCode).filter_by(code=discount_code).first()
+
+
+        if discount:
+            discounted_amount = context.user_data['selected_increment_amount'] * (1 - discount.discount_percent / 100)
+            user.remaining_credit += int(discounted_amount)
+            session.commit()
+
+            success_message = translate_text(f"✅ {int(discounted_amount)} units have been added to your credit!", user.preferred_language)
+            await update.message.reply_text(success_message)
+        else:
+            invalid_code_message = translate_text("❌ Invalid discount code. Adding full amount to your credit.", user.preferred_language)
+            await update.message.reply_text(invalid_code_message)
+            await add_credit_to_user(update, context, user)
+
+        # Reset the flag after processing the discount code
+        context.user_data['awaiting_discount_code'] = False
+
+    elif context.user_data.get('awaiting_ticket_title'):
         context.user_data['ticket_title'] = update.message.text
         await update.message.reply_text(translate_text("Please enter the description of your ticket:", user.preferred_language))
         context.user_data['awaiting_ticket_title'] = False
         context.user_data['awaiting_ticket_description'] = True
 
     elif context.user_data.get('awaiting_ticket_description'):
-        # Handle ticket description
         ticket_description = update.message.text
         ticket_title = context.user_data.get('ticket_title')
         new_ticket = Ticket(user_id=user.id, title=ticket_title, description=ticket_description)
@@ -494,7 +584,6 @@ async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['ticket_title'] = None
 
     elif context.user_data.get('awaiting_ticket_response'):
-        # Handle ticket response (for admins)
         response = update.message.text
         ticket_id = context.user_data.get('responding_ticket_id')
         ticket = session.query(Ticket).filter_by(id=ticket_id).first()
@@ -509,11 +598,288 @@ async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         context.user_data['awaiting_ticket_response'] = False
 
+    elif context.user_data.get('awaiting_discount_response'):
+        response = update.message.text.strip().lower()
+
+        if response == 'yes':
+            ask_code_message = translate_text("Please enter your discount code:", user.preferred_language)
+            await update.message.reply_text(ask_code_message)
+            context.user_data['awaiting_discount_code'] = True
+        elif response == 'no':
+            await add_credit_to_user(update, context, user)
+            context.user_data['awaiting_discount_response'] = False
+    
+    broadcast_to = context.user_data.get('broadcast_to')
+
+    if context.user_data.get('awaiting_broadcast_message'):
+        print(2)
+        message = update.message.text
+        if broadcast_to == 'users':
+            users = session.query(User).filter_by(is_bot=False).all()
+        elif broadcast_to == 'admins':
+            users = session.query(User).filter_by(is_admin=True).all()
+        else:
+            users = []
+
+        for user in users:
+            try:
+                await context.bot.send_message(chat_id=user.num_id, text=message)
+            except Exception as e:
+                print(f"Failed to send message to {user.username}: {e}")
+
+        await update.message.reply_text(f"✅ Message sent to all {broadcast_to}.")
+        context.user_data['awaiting_broadcast_message'] = False
+    session.close()
+
+async def add_credit_to_user(update, context, user):
+    session = Session()
+
+    try:
+        # Fetch the latest user data to ensure we are working with the most recent data
+        user = session.query(User).filter_by(id=user.id).first()
+
+        if user:
+            # Add the selected increment amount to the user's remaining credit
+            increment_amount = context.user_data['selected_increment_amount']
+            user.remaining_credit += increment_amount
+            session.commit()  # Commit the changes to the database
+
+            success_message = translate_text(f"✅ {increment_amount} units have been added to your credit!", user.preferred_language)
+            await update.message.reply_text(success_message)
+        else:
+            await update.message.reply_text("❌ Unable to find the user in the database.")
+
+    except Exception as e:
+        # Log the exception for debugging purposes
+        print(f"Error adding credit: {e}")
+        await update.message.reply_text("❌ An error occurred while adding credit. Please try again later.")
+
+    finally:
+        session.close()
+
+async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    referral_link = f"https://t.me/Sultanpanel_bot?start={user.num_id}"
+    referral_message = translate_text(f"🔗 Your referral link is:\n{referral_link}", user.preferred_language)
+
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(referral_message, reply_markup=reply_markup)
+    session.close()
+
+async def handle_admin_management(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    add_admin_button = translate_text("➕ Add Admin", user.preferred_language)
+    delete_admin_button = translate_text("➖ Delete Admin", user.preferred_language)
+
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard = [
+        [InlineKeyboardButton(add_admin_button, callback_data="add_admin")],
+        [InlineKeyboardButton(delete_admin_button, callback_data="delete_admin")],
+        [InlineKeyboardButton(back_button, callback_data="back")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text("🔧 Admin Management", reply_markup=reply_markup)
+    session.close()
+
+async def handle_manage_off_codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    add_code_button = translate_text("➕ Add Off Code", user.preferred_language)
+    view_codes_button = translate_text("📋 View Off Codes", user.preferred_language)
+    delete_code_button = translate_text("➖ Delete Off Code", user.preferred_language)
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard = [
+        [InlineKeyboardButton(add_code_button, callback_data="add_off_code")],
+        [InlineKeyboardButton(view_codes_button, callback_data="view_off_codes")],
+        [InlineKeyboardButton(delete_code_button, callback_data="delete_off_code")],
+        [InlineKeyboardButton(back_button, callback_data="back")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text("🔧 Manage Off Codes", reply_markup=reply_markup)
+    session.close()
+
+async def handle_add_off_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    await query.edit_message_text(translate_text("Please enter the off code (e.g., SAVE20):", user.preferred_language))
+    context.user_data['awaiting_off_code'] = True
+    session.close()
+
+async def handle_view_off_codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+
+    admin = session.query(User).filter_by(num_id=update.effective_user.id, is_admin=True).first()
+    if admin:
+        off_codes = session.query(DiscountCode).all()
+
+        if off_codes:
+            code_list = "\n".join([f"{code.code} - {code.discount_percent}%" for code in off_codes])
+            await query.message.reply_text(f"📋 Discount Codes:\n\n{code_list}")
+        else:
+            await query.message.reply_text("❌ No discount codes available.")
+
+    session.close()
+
+async def handle_delete_off_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    await query.edit_message_text(translate_text("Please enter the off code you want to delete:", user.preferred_language))
+    context.user_data['awaiting_off_code_deletion'] = True
+    session.close()
+
+async def handle_off_code_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    session = Session()
+    if context.user_data.get('awaiting_off_code'):
+        off_code = update.message.text.strip()
+        context.user_data['off_code'] = off_code
+        await update.message.reply_text(translate_text("Please enter the discount percent (e.g., 20):", context.user_data.get('preferred_language')))
+        context.user_data['awaiting_off_code'] = False
+        context.user_data['awaiting_discount_percent'] = True
+
+    elif context.user_data.get('awaiting_discount_percent'):
+        discount_percent = int(update.message.text.strip())
+        off_code = context.user_data.get('off_code')
+        new_code = DiscountCode(code=off_code, discount_percent=discount_percent)
+        session.add(new_code)
+        session.commit()
+
+        await update.message.reply_text(f"✅ Discount code {off_code} with {discount_percent}% discount has been added.")
+        context.user_data['awaiting_discount_percent'] = False
+        context.user_data['off_code'] = None
+
+    elif context.user_data.get('awaiting_off_code_deletion'):
+        off_code = update.message.text.strip()
+        code_to_delete = session.query(DiscountCode).filter_by(code=off_code).first()
+
+        if code_to_delete:
+            session.delete(code_to_delete)
+            session.commit()
+            await update.message.reply_text(f"✅ Discount code {off_code} has been deleted.")
+        else:
+            await update.message.reply_text(f"❌ Discount code {off_code} not found.")
+
+        context.user_data['awaiting_off_code_deletion'] = False
+
+    session.close()
+
+async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    users_button = translate_text("👥 Users", user.preferred_language)
+    admins_button = translate_text("👤 Admins", user.preferred_language)
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard = [
+        [InlineKeyboardButton(users_button, callback_data="broadcast_users")],
+        [InlineKeyboardButton(admins_button, callback_data="broadcast_admins")],
+        [InlineKeyboardButton(back_button, callback_data="back")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text("📢 Broadcast Message", reply_markup=reply_markup)
+    session.close()
+
+async def handle_broadcast_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.edit_message_text(translate_text("Please enter the message to broadcast to all users:", context.user_data.get('preferred_language')))
+    context.user_data['broadcast_to'] = 'users'
+    context.user_data['awaiting_broadcast_message'] = True
+
+async def handle_broadcast_admins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.edit_message_text(translate_text("Please enter the message to broadcast to all admins:", context.user_data.get('preferred_language')))
+    context.user_data['broadcast_to'] = 'admins'
+    context.user_data['awaiting_broadcast_message'] = True
+
+async def handle_broadcast_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    session = Session()
+    broadcast_to = context.user_data.get('broadcast_to')
+    print(broadcast_to)
+    if context.user_data.get('awaiting_broadcast_message'):
+        message = update.message.text
+        if broadcast_to == 'users':
+            users = session.query(User).filter_by(is_bot=False).all()
+        elif broadcast_to == 'admins':
+            users = session.query(User).filter_by(is_admin=True).all()
+        else:
+            users = []
+
+        for user in users:
+            try:
+                await context.bot.send_message(chat_id=user.num_id, text=message)
+            except Exception as e:
+                print(f"Failed to send message to {user.username}: {e}")
+
+        await update.message.reply_text(f"✅ Message sent to all {broadcast_to}.")
+        context.user_data['awaiting_broadcast_message'] = False
+
+    session.close()
+
+async def handle_increment_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    amounts = [20, 40, 60, 80, 100]
+    keyboard = [[InlineKeyboardButton(f"{amount} units", callback_data=f"increment_{amount}")] for amount in amounts]
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    increment_message = translate_text("Please select the amount of credit you want to add:", user.preferred_language)
+    await query.edit_message_text(increment_message, reply_markup=reply_markup)
+    session.close()
+
+async def handle_increment_amount_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    action, amount = query.data.split('_')
+    context.user_data['selected_increment_amount'] = int(amount)
+
+    ask_discount_message = translate_text("Do you have a discount code? (Yes/No)", user.preferred_language)
+    await query.edit_message_text(ask_discount_message)
+    context.user_data['awaiting_discount_response'] = True
+    session.close()
+
+async def handle_discount_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    if context.user_data.get('awaiting_discount_response'):
+        response = update.message.text.strip().lower()
+
+        if response == 'yes':
+            ask_code_message = translate_text("Please enter your discount code:", user.preferred_language)
+            await update.message.reply_text(ask_code_message)
+            context.user_data['awaiting_discount_code'] = True
+            context.user_data['awaiting_discount_response'] = False  # Reset the flag as we're now awaiting the code
+
     session.close()
 
 def main():
     application = ApplicationBuilder().token(TOKEN).build()
-
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CallbackQueryHandler(handle_language_selection, pattern='^(' + '|'.join(languages.keys()) + ')$'))
     application.add_handler(CallbackQueryHandler(handle_account_info, pattern='^account_info$'))
@@ -527,7 +893,17 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_create_ticket, pattern='^create_ticket$'))
     application.add_handler(CallbackQueryHandler(handle_view_tickets, pattern='^view_tickets$'))
     application.add_handler(CallbackQueryHandler(handle_view_ticket, pattern=r'^view_ticket_\d+$'))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_input))
+    application.add_handler(CallbackQueryHandler(handle_referral_link, pattern='^referral_link$'))
+    application.add_handler(CallbackQueryHandler(handle_admin_management, pattern='^admin_management$'))
+    application.add_handler(CallbackQueryHandler(handle_manage_off_codes, pattern='^manage_off_codes$'))
+    application.add_handler(CallbackQueryHandler(handle_add_off_code, pattern='^add_off_code$'))
+    application.add_handler(CallbackQueryHandler(handle_view_off_codes, pattern='^view_off_codes$'))
+    application.add_handler(CallbackQueryHandler(handle_delete_off_code, pattern='^delete_off_code$'))
+    application.add_handler(CallbackQueryHandler(handle_broadcast_message, pattern='^broadcast_message$'))
+    application.add_handler(CallbackQueryHandler(handle_broadcast_users, pattern='^broadcast_users$'))
+    application.add_handler(CallbackQueryHandler(handle_broadcast_admins, pattern='^broadcast_admins$'))
+    application.add_handler(CallbackQueryHandler(handle_increment_credit, pattern='^increment_credit$'))
+    application.add_handler(CallbackQueryHandler(handle_increment_amount_selection, pattern=r'^increment_\d+$'))
 
     application.run_polling()
 
