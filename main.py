@@ -911,7 +911,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         else:
             await update.message.reply_text(
                 translate_text(
-                    "Invalid quantity or service ID. Please try again.",
+                    f"Invalid quantity or service ID. Please try again. minimum is : {service["min"]} maximum is : {service["max"]}",
                     user.preferred_language,
                 )
             )
@@ -1325,10 +1325,11 @@ async def handle_add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if platform in service["category"]:
                 platforms[platform].append(service)
                 break
-
+    
     # Filter out any platforms without services
+    print(platforms)
     platforms = {platform: services for platform, services in platforms.items() if services}
-
+    
     # Show available social media platforms
     keyboard = [
         [InlineKeyboardButton(platform, callback_data=f"platform_{i}")]

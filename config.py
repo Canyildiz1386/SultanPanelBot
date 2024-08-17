@@ -4,10 +4,10 @@ API_URL = "https://followeriha.com/api/v2"
 API_KEY = "5fa6f085fb10db47fec23f3f74eb4c97"
 admin_usernames = ["Canyildiz1386", "followergir_support"]
 SOCIAL_MEDIA_PLATFORMS = [
-    "📸 اینستاگرام",
-    "🎵 تیک تاک",
-    "📺 یوتیوب",
-    "🐦 توییتر",
-    "📱 تلگرام",
-    "🟩 روبیکا"
+    " اینستاگرام",
+    " تیک تاک",
+    " یوتیوب",
+    " توییتر",
+    " تلگرام",
+    " روبیکا"
 ]
