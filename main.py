@@ -952,6 +952,12 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         else : 
             user.remaining_credit += int(context.user_data['selected_increment_amount'])
             session.commit()
+            ask_code_message = translate_text(
+                "unit added to account", user.preferred_language
+            )
+            await update.message.reply_text(ask_code_message)
+        await show_main_menu(update,context,user)
+
     elif context.user_data.get("awaiting_off_code_deletion"):
         off_code = update.message.text.strip()
         code_to_delete = session.query(DiscountCode).filter_by(code=off_code).first()
