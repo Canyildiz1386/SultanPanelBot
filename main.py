@@ -911,7 +911,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         else:
             await update.message.reply_text(
                 translate_text(
-                    f"Invalid quantity or service ID. Please try again. minimum is : {service["min"]} maximum is : {service["max"]}",
+                    f"Invalid quantity or service ID. Please try again.",
                     user.preferred_language,
                 )
             )
