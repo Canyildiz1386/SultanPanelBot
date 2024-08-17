@@ -951,6 +951,8 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             await update.message.reply_text(ask_code_message)
             context.user_data["awaiting_discount_code"] = True
+        else : 
+            user.remaining_credit += int(context.user_data['selected_increment_amount'])
 
     elif context.user_data.get("awaiting_off_code_deletion"):
         off_code = update.message.text.strip()
