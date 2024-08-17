@@ -712,9 +712,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         discount = session.query(DiscountCode).filter_by(code=discount_code).first()
 
         if discount:
-            discounted_amount = context.user_data["selected_increment_amount"] * (
-                1 - discount.discount_percent / 100
-            )
+            discounted_amount = context.user_data["selected_increment_amount"]
             user.remaining_credit += int(discounted_amount)
             session.commit()
 
@@ -953,7 +951,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data["awaiting_discount_code"] = True
         else : 
             user.remaining_credit += int(context.user_data['selected_increment_amount'])
-
+            session.commit()
     elif context.user_data.get("awaiting_off_code_deletion"):
         off_code = update.message.text.strip()
         code_to_delete = session.query(DiscountCode).filter_by(code=off_code).first()
