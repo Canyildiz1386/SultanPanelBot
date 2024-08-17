@@ -14,7 +14,8 @@ from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timezone, timedelta
 import requests
-from config import TOKEN, NOTIFICATION_CHANNEL_ID, API_KEY, API_URL, admin_usernames
+from config import TOKEN, NOTIFICATION_CHANNEL_ID, API_KEY, API_URL, admin_usernames , SOCIAL_MEDIA_PLATFORMS
+
 
 languages = {"🇬🇧 English": "en", "🇮🇷 فارسی": "fa"}
 
@@ -841,13 +842,25 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     elif context.user_data.get("awaiting_quantity"):
         quantity = int(update.message.text.strip())
+
+        # Ensure service_id is in context.user_data
+        if "selected_service_id" not in context.user_data:
+            await update.message.reply_text(
+                "Error: Service ID is missing. Please start the order process again."
+            )
+            return
+
+        service_id = context.user_data["selected_service_id"]
+
+        # Get the service from the API or from previously fetched data
         response = requests.post(API_URL, data={"key": API_KEY, "action": "services"})
         services = response.json()
 
         service = next(
-            (s for s in services if s["service"] == (context.user_data["service_id"])),
+            (s for s in services if s["service"] == service_id),
             None,
         )
+
         if service and int(service["min"]) <= quantity <= int(service["max"]):
             toman_to_dollar_rate = 42000
             toman_rate = float(service["rate"]) * quantity / 1000
@@ -876,7 +889,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                     data={
                         "key": API_KEY,
                         "action": "add",
-                        "service": context.user_data["service_id"],
+                        "service": service_id,
                         "link": context.user_data["link"],
                         "quantity": quantity,
                     },
@@ -904,8 +917,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
 
         context.user_data["awaiting_quantity"] = False
-        await show_main_menu(update,context,user)
-
+        await show_main_menu(update, context, user)
 
     elif context.user_data.get("awaiting_unit_value"):
         unit_value_dollars = float(update.message.text.strip())
@@ -1296,16 +1308,125 @@ async def handle_view_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session.close()
 
 
+
 async def handle_add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
+    # Fetch services
+    response = requests.post(API_URL, data={"key": API_KEY, "action": "services"})
+    services = response.json()
+
+    # Organize services by social media platform based on predefined Persian names
+    platforms = {platform: [] for platform in SOCIAL_MEDIA_PLATFORMS}
+    for service in services:
+        for platform in SOCIAL_MEDIA_PLATFORMS:
+            if platform in service["category"]:
+                platforms[platform].append(service)
+                break
+
+    # Filter out any platforms without services
+    platforms = {platform: services for platform, services in platforms.items() if services}
+
+    # Show available social media platforms
+    keyboard = [
+        [InlineKeyboardButton(platform, callback_data=f"platform_{i}")]
+        for i, platform in enumerate(platforms.keys())
+    ]
+    back_button = translate_text("🔙 بازگشت", user.preferred_language)
+    keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await query.edit_message_text(
-        translate_text("Please enter the Service ID:", user.preferred_language)
+        translate_text("لطفا یک پلتفرم اجتماعی را انتخاب کنید:", user.preferred_language),
+        reply_markup=reply_markup,
     )
-    context.user_data["awaiting_service_id"] = True
+
+    context.user_data["platforms"] = list(platforms.items())  # Save platforms for later use
     session.close()
+
+async def handle_platform_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    platform_index = int(query.data.split("_")[1])
+    platform, services = context.user_data["platforms"][platform_index]
+
+    # Store the platform_index for later use in the category selection
+    context.user_data["platform_index"] = platform_index
+
+    # Organize services by category
+    categories = {}
+    for service in services:
+        category = service["category"]
+        if category not in categories:
+            categories[category] = []
+        categories[category].append(service)
+
+    # Show categories
+    keyboard = [
+        [InlineKeyboardButton(category[:60], callback_data=f"category_{i}")]
+        for i, category in enumerate(categories.keys())
+    ]
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard.append([InlineKeyboardButton(back_button, callback_data="add_order")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        translate_text(f"Please select a category under {platform}:", user.preferred_language),
+        reply_markup=reply_markup,
+    )
+
+    context.user_data["categories"] = list(categories.items())  # Save categories for later use
+    session.close()
+
+
+async def handle_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    category_index = int(query.data.split("_")[1])
+    category, services = context.user_data["categories"][category_index]
+
+    # Retrieve the stored platform_index
+    platform_index = context.user_data["platform_index"]
+
+    # Show services
+    keyboard = [
+        [InlineKeyboardButton(service["name"][:60], callback_data=f"service_{service['service']}")]
+        for service in services
+    ]
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard.append([InlineKeyboardButton(back_button, callback_data=f"platform_{platform_index}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        translate_text(f"Please select a service in {category}:", user.preferred_language),
+        reply_markup=reply_markup,
+    )
+    session.close()
+
+
+async def handle_service_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    # Extract the service_id from the callback data and store it in context.user_data
+    service_id = query.data.split("_")[1]
+    context.user_data["selected_service_id"] = service_id
+
+    # Proceed to ask for the link
+    await query.edit_message_text(
+        translate_text("Please enter the link:", user.preferred_language)
+    )
+    context.user_data["awaiting_link"] = True
+    session.close()
+
+
 
 
 
@@ -1419,6 +1540,15 @@ def main():
     )
     application.add_handler(
         CallbackQueryHandler(handle_manage_unit_value, pattern="^manage_unit_value$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_platform_selection, pattern=r"^platform_.+$")
+    )
+    application.add_handler(
+    CallbackQueryHandler(handle_category_selection, pattern=r"^category_.+$")
+    )
+    application.add_handler(
+    CallbackQueryHandler(handle_service_selection, pattern=r"^service_.+$")
     )
 
     application.run_polling()
