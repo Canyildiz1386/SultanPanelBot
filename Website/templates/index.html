@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sultan Panel Bot - Your Social Media Management Companion</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        header {
+            background-color: #ff6600;
+            color: white;
+            padding: 20px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0px 4px 2px -2px gray;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            max-width: 1000px;
+            margin: auto;
+        }
+        .bot-icon {
+            max-width: 200px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+        .start-button {
+            background-color: #28a745;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            font-size: 1.2rem;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        .start-button:hover {
+            background-color: #218838;
+        }
+        .features {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            margin: 40px 0;
+        }
+        .feature {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px;
+            width: 280px;
+            box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .feature h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+        .testimonials {
+            background-color: #f9f9f9;
+            padding: 40px;
+            margin: 40px 0;
+        }
+        .testimonial {
+            margin-bottom: 30px;
+        }
+        .testimonial p {
+            font-style: italic;
+        }
+        .testimonial h4 {
+            margin-top: 10px;
+            font-size: 1.1rem;
+            color: #555;
+        }
+        .contact-form {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: 20px auto;
+        }
+        .contact-form h3 {
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+        .contact-form input[type="text"], 
+        .contact-form input[type="email"], 
+        .contact-form textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .contact-form button {
+            background-color: #ff6600;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .contact-form button:hover {
+            background-color: #e65c00;
+        }
+        footer {
+            background-color: #333;
+            color: white;
+            padding: 20px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+            bottom: 0;
+        }
+        .social-icons img {
+            width: 40px;
+            margin: 0 10px;
+            transition: transform 0.3s ease;
+        }
+        .social-icons img:hover {
+            transform: scale(1.1);
+        }
+        .language-switcher {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: #ff6600;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1 data-en="Sultan Panel Bot" data-fa="ربات سلطان پنل">{{ "Sultan Panel Bot" if lang == 'en' else "ربات سلطان پنل" }}</h1>
+    <p data-en="Your Ultimate Social Media Management Companion" data-fa="همراه برتر مدیریت شبکه‌های اجتماعی شما">
+        {{ "Your Ultimate Social Media Management Companion" if lang == 'en' else "همراه برتر مدیریت شبکه‌های اجتماعی شما" }}
+    </p>
+</header>
+
+<div class="container">
+    <img src="{{ url_for('serve_images', filename='icon.jpg') }}" alt="Sultan Panel Bot Icon" class="bot-icon">
+    <h1 data-en="Welcome to Sultan Panel" data-fa="به سلطان پنل خوش آمدید">
+        {{ "Welcome to Sultan Panel" if lang == 'en' else "به سلطان پنل خوش آمدید" }}
+    </h1>
+    <p data-en="Manage your social media platforms effortlessly with our powerful bot. Automate tasks, track performance, and grow your online presence with ease." data-fa="با ربات قدرتمند ما به راحتی شبکه‌های اجتماعی خود را مدیریت کنید. وظایف خود را خودکار کنید، عملکرد را پیگیری کنید و حضور آنلاین خود را با سهولت افزایش دهید.">
+        {{ "Manage your social media platforms effortlessly with our powerful bot. Automate tasks, track performance, and grow your online presence with ease." if lang == 'en' else "با ربات قدرتمند ما به راحتی شبکه‌های اجتماعی خود را مدیریت کنید. وظایف خود را خودکار کنید، عملکرد را پیگیری کنید و حضور آنلاین خود را با سهولت افزایش دهید." }}
+    </p>
+    <a href="https://t.me/Sultanpanel_bot" class="start-button" data-en="Start the Bot" data-fa="شروع ربات">
+        {{ "Start the Bot" if lang == 'en' else "شروع ربات" }}
+    </a>
+
+    <!-- Features Section -->
+    <div class="features">
+        <div class="feature">
+            <h3 data-en="🚀 Fast and Reliable" data-fa="🚀 سریع و قابل اعتماد">
+                {{ "🚀 Fast and Reliable" if lang == 'en' else "🚀 سریع و قابل اعتماد" }}
+            </h3>
+            <p data-en="Our bot is built for speed and reliability, ensuring your tasks are completed efficiently." data-fa="ربات ما برای سرعت و قابلیت اطمینان طراحی شده است و وظایف شما را به طور کارآمد تکمیل می‌کند.">
+                {{ "Our bot is built for speed and reliability, ensuring your tasks are completed efficiently." if lang == 'en' else "ربات ما برای سرعت و قابلیت اطمینان طراحی شده است و وظایف شما را به طور کارآمد تکمیل می‌کند." }}
+            </p>
+        </div>
+        <div class="feature">
+            <h3 data-en="📊 Analytics" data-fa="📊 تجزیه و تحلیل">
+                {{ "📊 Analytics" if lang == 'en' else "📊 تجزیه و تحلیل" }}
+            </h3>
+            <p data-en="Get detailed analytics on your social media performance to help you make informed decisions." data-fa="تجزیه و تحلیل دقیق از عملکرد شبکه‌های اجتماعی خود را دریافت کنید تا به شما در تصمیم‌گیری‌های آگاهانه کمک کند.">
+                {{ "Get detailed analytics on your social media performance to help you make informed decisions." if lang == 'en' else "تجزیه و تحلیل دقیق از عملکرد شبکه‌های اجتماعی خود را دریافت کنید تا به شما در تصمیم‌گیری‌های آگاهانه کمک کند." }}
+            </p>
+        </div>
+        <div class="feature">
+            <h3 data-en="🔗 Multi-Platform Support" data-fa="🔗 پشتیبانی چند پلتفرم">
+                {{ "🔗 Multi-Platform Support" if lang == 'en' else "🔗 پشتیبانی چند پلتفرم" }}
+            </h3>
+            <p data-en="Manage multiple social media platforms from a single interface, including Instagram, Twitter, and more." data-fa="مدیریت چندین پلتفرم اجتماعی از یک رابط واحد، از جمله اینستاگرام، توییتر و بیشتر.">
+                {{ "Manage multiple social media platforms from a single interface, including Instagram, Twitter, and more." if lang == 'en' else "مدیریت چندین پلتفرم اجتماعی از یک رابط واحد، از جمله اینستاگرام، توییتر و بیشتر." }}
+            </p>
+        </div>
+        <div class="feature">
+            <h3 data-en="🎯 Targeted Actions" data-fa="🎯 اقدامات هدفمند">
+                {{ "🎯 Targeted Actions" if lang == 'en' else "🎯 اقدامات هدفمند" }}
+            </h3>
+            <p data-en="Customize your actions based on specific targets to achieve the best results." data-fa="اقدامات خود را بر اساس اهداف خاص سفارشی کنید تا بهترین نتایج را به دست آورید.">
+                {{ "Customize your actions based on specific targets to achieve the best results." if lang == 'en' else "اقدامات خود را بر اساس اهداف خاص سفارشی کنید تا بهترین نتایج را به دست آورید." }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Contact Form -->
+    <div class="contact-form">
+        <h3 data-en="Contact Us" data-fa="تماس با ما">
+            {{ "Contact Us" if lang == 'en' else "تماس با ما" }}
+        </h3>
+        <form action="mailto:your-email@example.com" method="post" enctype="text/plain">
+            <input type="text" name="name" placeholder="{{ 'Your Name' if lang == 'en' else 'نام شما' }}" required>
+            <input type="email" name="email" placeholder="{{ 'Your Email' if lang == 'en' else 'ایمیل شما' }}" required>
+            <textarea name="message" rows="5" placeholder="{{ 'Your Message' if lang == 'en' else 'پیام شما' }}" required></textarea>
+            <button type="submit" data-en="Send Message" data-fa="ارسال پیام">
+                {{ "Send Message" if lang == 'en' else "ارسال پیام" }}
+            </button>
+        </form>
+    </div>
+</div>
+
+<footer>
+    <p>&copy; 2024 Sultan Panel Bot. {{ "All rights reserved." if lang == 'en' else "کلیه حقوق محفوظ است." }}</p>
+    <div class="social-icons">
+        <a href="#"><img src="https://image.shutterstock.com/image-vector/facebook-icon-260nw-1432211044.jpg" alt="Facebook"></a>
+        <a href="#"><img src="https://image.shutterstock.com/image-vector/instagram-icon-260nw-1432211046.jpg" alt="Instagram"></a>
+        <a href="#"><img src="https://image.shutterstock.com/image-vector/twitter-icon-260nw-1432211043.jpg" alt="Twitter"></a>
+    </div>
+</footer>
+
+<div class="language-switcher">
+    <a href="/switch_language?lang={{ 'fa' if lang == 'en' else 'en' }}" style="color: white;">
+        {{ "Switch to فارسی" if lang == 'en' else "Switch to English" }}
+    </a>
+</div>
+
+</body>
+</html>
