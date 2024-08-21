@@ -60,7 +60,10 @@ class DiscountCode(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String, unique=True, nullable=False)
     discount_percent = Column(Integer, nullable=False)
-
+class ConversionRate(Base):
+    __tablename__ = "conversion_rate"
+    id = Column(Integer, primary_key=True)
+    rate = Column(Integer, nullable=False, default=60000)
 class Unit(Base):
     __tablename__ = "units"
     id = Column(Integer, primary_key=True)
@@ -178,32 +181,34 @@ async def handle_language_selection(update: Update, context: ContextTypes.DEFAUL
     session.close()
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, user):
-    session = Session()  # Open the session here
+    session = Session()
 
-    # Reattach the user instance to the active session if necessary
     if not session.is_active:
         session.begin()
 
-    user = session.merge(user)  # Ensure the user is attached to the session
+    user = session.merge(user)
 
     settings_button = translate_text("⚙️ Settings", user.preferred_language)
     chance_circle_button = translate_text("🎯 Chance Circle", user.preferred_language)
     ticket_button = translate_text("🎫 Create Ticket", user.preferred_language)
     referral_link_button = translate_text("🔗 Referral Link", user.preferred_language)
     increment_credit_button = translate_text("💳 Increase Credit", user.preferred_language)
-    
-    manage_order_button = translate_text("🛒 Manage Order", user.preferred_language)  # Added Manage Order button
-    
+    manage_conversion_rate_button = translate_text("💲 Manage Conversion Rate", user.preferred_language)
+
+    add_order_button = translate_text("➕ Add Order", user.preferred_language)
+    view_order_button = translate_text("🔍 View Order", user.preferred_language)
+
     if user.is_admin:
         account_info_button = translate_text("ℹ️ Account Information", user.preferred_language)
         view_agencies_button = translate_text("📊 View Agency Requests", user.preferred_language)
         view_tickets_button = translate_text("🎟️ View Tickets", user.preferred_language)
-        
+
         manage_off_codes_button = translate_text("🔧 Manage Off Codes", user.preferred_language)
         manage_unit_value_button = translate_text("💲 Manage Unit Value", user.preferred_language)
         broadcast_button = translate_text("📢 Broadcast Message", user.preferred_language)
         keyboard = [
-            [InlineKeyboardButton(manage_order_button, callback_data="manage_order")],  # Added Manage Order button here
+            [InlineKeyboardButton(add_order_button, callback_data="add_order")],
+            [InlineKeyboardButton(view_order_button, callback_data="view_order")],
             [InlineKeyboardButton(account_info_button, callback_data="account_info")],
             [InlineKeyboardButton(view_agencies_button, callback_data="view_agency_requests")],
             [InlineKeyboardButton(view_tickets_button, callback_data="view_tickets")],
@@ -215,11 +220,14 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
             [InlineKeyboardButton(manage_unit_value_button, callback_data="manage_unit_value")],
             [InlineKeyboardButton(broadcast_button, callback_data="broadcast_message")],
         ]
+        keyboard.append([InlineKeyboardButton(manage_conversion_rate_button, callback_data="manage_conversion_rate")])
+
     else:
         account_info_button = translate_text("ℹ️ Account Information", user.preferred_language)
         request_agency_button = translate_text("🏢 Request Agency", user.preferred_language)
         keyboard = [
-            [InlineKeyboardButton(manage_order_button, callback_data="manage_order")],  # Added Manage Order button here
+            [InlineKeyboardButton(add_order_button, callback_data="add_order")],
+            [InlineKeyboardButton(view_order_button, callback_data="view_order")],
             [InlineKeyboardButton(account_info_button, callback_data="account_info")],
             [InlineKeyboardButton(request_agency_button, callback_data="request_agency")],
             [InlineKeyboardButton(settings_button, callback_data="settings")],
@@ -230,7 +238,6 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     welcome_message = translate_text(
         "🎉 Welcome to the bot! 🎊\n\n"
         "We are thrilled to have you here! 🌟\n"
@@ -339,10 +346,34 @@ async def handle_chance_circle(update: Update, context: ContextTypes.DEFAULT_TYP
 import requests
 
 async def get_dollar_to_toman_rate():
-    response = requests.get("https://api.exchangerate-api.com/v4/latest/USD")
-    data = response.json()
-    return data["rates"]["IRR"]  # Assuming the API provides rates with IRR for Toman
+    session = Session()
+    rate_entry = session.query(ConversionRate).first()
+    if rate_entry:
+        rate = rate_entry.rate
+    else:
+        # If no rate is set, use the default value
+        rate = 60000
+        # Save the default rate to the database
+        new_rate = ConversionRate(rate=rate)
+        session.add(new_rate)
+        session.commit()
 
+    session.close()
+    return rate
+async def handle_manage_conversion_rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    if user.is_admin:
+        await query.edit_message_text(
+            translate_text("💲 Please enter the new conversion rate (Toman per Dollar):", user.preferred_language)
+        )
+        context.user_data["awaiting_conversion_rate"] = True
+    else:
+        await query.edit_message_text(translate_text("❌ You do not have permission to perform this action.", user.preferred_language))
+
+    session.close()
 async def handle_account_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
@@ -354,28 +385,40 @@ async def handle_account_info(update: Update, context: ContextTypes.DEFAULT_TYPE
     membership_duration = (datetime.now(timezone.utc) - user.join_date).days
     dollar_to_toman_rate = await get_dollar_to_toman_rate()
     
+    # Convert credits to dollars and tomans
     credit_dollars = user.remaining_credit / 100
     credit_toman = credit_dollars * dollar_to_toman_rate
     credit_info = f"{credit_dollars:.2f}$ ({int(credit_toman):,} Toman)"
-
+    
+    # Convert referral credits to dollars and tomans
+    referral_dollars = user.referral_credit / 100
+    referral_toman = referral_dollars * dollar_to_toman_rate
+    referral_info = f"{referral_dollars:.2f}$ ({int(referral_toman):,} Toman)"
+    
+    # Convert sub-transaction earnings to dollars and tomans
+    sub_transaction_dollars = user.sub_transaction_earnings / 100
+    sub_transaction_toman = sub_transaction_dollars * dollar_to_toman_rate
+    sub_transaction_info = f"{sub_transaction_dollars:.2f}$ ({int(sub_transaction_toman):,} Toman)"
+    
+    # Form the account information text
     account_info_text = (
         f"ℹ️ Account Information:\n\n"
         f"📅 Membership Duration: {membership_duration} days 📅\n"
         f"💳 Used Credit: {user.used_credit} units 💳\n"
         f"💰 Remaining Credit: {credit_info}\n"
-        f"🎁 Credit from Referrals: {user.referral_credit} units 🎁\n"
-        f"💵 Earnings from Sub-transactions: {user.sub_transaction_earnings} units 💵"
+        f"🎁 Credit from Referrals: {referral_info}\n"
+        f"💵 Earnings from Sub-transactions: {sub_transaction_info}"
     )
     
     account_info_text = translate_text(account_info_text, user.preferred_language)
-
-    back_button = translate_text("🔙 Back", user.preferred_language)
+    back_button = translate_text("🔙 Back to Main Menu", user.preferred_language)
     keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.answer()
     await query.edit_message_text(account_info_text, reply_markup=reply_markup)
     session.close()
+
+
 
 
 async def handle_request_agency(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -533,7 +576,26 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
     broadcast_to = context.user_data.get("broadcast_to")
+    if context.user_data.get("awaiting_conversion_rate"):
+        try:
+            new_rate = int(update.message.text.strip())
+            rate_entry = session.query(ConversionRate).first()
 
+            if rate_entry:
+                rate_entry.rate = new_rate
+            else:
+                new_rate_entry = ConversionRate(rate=new_rate)
+                session.add(new_rate_entry)
+
+            session.commit()
+
+            success_message = translate_text(f"✅ Conversion rate updated to {new_rate} Toman per Dollar.", user.preferred_language)
+            await update.message.reply_text(success_message)
+        except ValueError:
+            await update.message.reply_text(translate_text("❌ Invalid rate. Please enter a valid number.", user.preferred_language))
+
+        context.user_data["awaiting_conversion_rate"] = False
+        await show_main_menu(update, context, user)
     if context.user_data.get("awaiting_custom_increment"):
         try:
             custom_amount = float(update.message.text.strip())
@@ -742,8 +804,9 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             if unit:
                 unit_value_cents = unit.value
             else:
-                await update.message.reply_text("❌ Unit value is not set. Please contact an admin. ❌")
+                await update.message.reply_text(translate_text("❌ Unit value is not set. Please contact an admin. ❌",user.preferred_language))
                 session.close()
+                
                 return
 
             total_cost_in_credits = dollar_amount * (100 / unit_value_cents)
@@ -1366,7 +1429,11 @@ async def show_orders_page(update: Update, context: ContextTypes.DEFAULT_TYPE, u
         [InlineKeyboardButton(f"Order ID: {order.order_id}", callback_data=f"view_order_{order.order_id}")]
         for order in orders[start_index:end_index]
     ]
+  
+    reply_markup = InlineKeyboardMarkup(keyboard)
     back_button = translate_text("🔙 Back", user.preferred_language)
+    custom_order_button = translate_text("🔍 Enter Custom Order ID", user.preferred_language)
+    keyboard.append([InlineKeyboardButton(custom_order_button, callback_data="custom_order_id")])
     keyboard.append([InlineKeyboardButton(back_button, callback_data=f"back")])
     if start_index > 0:
         keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="previous_orders_page")])
@@ -1485,6 +1552,7 @@ def main():
     # Add the new handlers here
     application.add_handler(CallbackQueryHandler(handle_custom_order_id, pattern="^custom_order_id$"))
     
+    application.add_handler(CallbackQueryHandler(handle_manage_conversion_rate, pattern="^manage_conversion_rate$"))
 
     application.run_polling()
 
