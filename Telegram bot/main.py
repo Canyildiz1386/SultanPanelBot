@@ -1583,7 +1583,7 @@ async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_
 
     order_id = query.data.split("_")[2]
     order = session.query(Order).filter_by(order_id=order_id, user_id=user.id).first()
-
+    
     if order:
         # Fetching order status and details
         response = requests.post(API_URL, data={"key": API_KEY, "action": "status", "order": order_id})
@@ -1591,7 +1591,7 @@ async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_
 
         start_count = int(float(order_status.get('start_count') or 0))
         remains = float(order_status.get('remains', 0))
-        charge = float(order_status.get('charge', 0))
+        charge = order.quantity
         total_count = start_count + charge
 
         if total_count > 0:
