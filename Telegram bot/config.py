@@ -13,3 +13,4 @@ SOCIAL_MEDIA_PLATFORMS = [
     " تلگرام",
     " روبیکا"
 ]
+languages = {"🇬🇧 English": "en", "🇮🇷 فارسی": "fa"}

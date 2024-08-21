@@ -15,13 +15,20 @@ from deep_translator import GoogleTranslator
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timezone, timedelta
-from config import TOKEN, NOTIFICATION_CHANNEL_ID, API_KEY, API_URL, admin_usernames, SOCIAL_MEDIA_PLATFORMS, REPRESENTATIVES
-
-# Supported languages for translation
-languages = {"🇬🇧 English": "en", "🇮🇷 فارسی": "fa"}
+from config import (
+    TOKEN,
+    NOTIFICATION_CHANNEL_ID,
+    API_KEY,
+    API_URL,
+    admin_usernames,
+    SOCIAL_MEDIA_PLATFORMS,
+    REPRESENTATIVES,
+    languages
+)
 
 # Setting up SQLAlchemy ORM base class
 Base = declarative_base()
+
 
 # User model for storing user details
 class User(Base):
@@ -41,8 +48,11 @@ class User(Base):
     remaining_credit = Column(Integer, default=1)
     referral_credit = Column(Integer, default=0)
     sub_transaction_earnings = Column(Integer, default=0)
-    last_chance_time = Column(DateTime, default=lambda: datetime.now(timezone.utc) - timedelta(days=1))
+    last_chance_time = Column(
+        DateTime, default=lambda: datetime.now(timezone.utc) - timedelta(days=1)
+    )
     referrer_id = Column(Integer, nullable=True)
+
 
 # AgencyRequest model for handling agency requests
 class AgencyRequest(Base):
@@ -51,6 +61,7 @@ class AgencyRequest(Base):
     user_id = Column(Integer)
     daily_sales = Column(String)
     status = Column(String, default="pending")
+
 
 # Ticket model for storing support tickets
 class Ticket(Base):
@@ -61,6 +72,7 @@ class Ticket(Base):
     description = Column(String)
     status = Column(String, default="open")
 
+
 # DiscountCode model for storing discount codes
 class DiscountCode(Base):
     __tablename__ = "discount_codes"
@@ -68,11 +80,13 @@ class DiscountCode(Base):
     code = Column(String, unique=True, nullable=False)
     discount_percent = Column(Integer, nullable=False)
 
+
 # ConversionRate model for storing conversion rates
 class ConversionRate(Base):
     __tablename__ = "conversion_rate"
     id = Column(Integer, primary_key=True)
     rate = Column(Integer, nullable=False, default=60000)
+
 
 # Unit model for storing unit values
 class Unit(Base):
@@ -80,6 +94,7 @@ class Unit(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     value = Column(Integer, nullable=False, default=1)  # Default value set to 1
+
 
 # Order model for storing orders
 class Order(Base):
@@ -93,16 +108,19 @@ class Order(Base):
     status = Column(String, default="Pending")
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+
 # Database setup
 engine = create_engine("sqlite:///telegram_bot.db")
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
+
 
 # Helper function to translate text based on user's preferred language
 def translate_text(text, target_language):
     if target_language:
         return GoogleTranslator(source="auto", target=target_language).translate(text)
     return text
+
 
 # The start command handler, responsible for initiating the bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -149,7 +167,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         referrer.preferred_language,
                     ),
                 )
-
+        
         # Notify admin of a new user
         await context.bot.send_message(
             chat_id=NOTIFICATION_CHANNEL_ID,
@@ -161,6 +179,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🌐 Profile URL: {new_user.profile_url}\n"
             f"💎 Premium: {'Yes' if new_user.is_premium else 'No'}\n"
             f"🤖 Bot: {'Yes' if new_user.is_bot else 'No'}",
+        
         )
 
         # Prompt the user to select a language
@@ -170,15 +189,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     session.close()
 
+
 # Function to prompt user for language selection
-async def prompt_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, user):
+async def prompt_language_selection(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user
+):
     keyboard = [
         [InlineKeyboardButton(lang, callback_data=lang)] for lang in languages.keys()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    language_prompt = "🌍 Please choose your language 🗣️ / لطفا زبان خود را انتخاب کنید: 🌐"
+    language_prompt = (
+        "🌍 Please choose your language 🗣️ / لطفا زبان خود را انتخاب کنید: 🌐"
+    )
 
     await update.message.reply_text(language_prompt, reply_markup=reply_markup)
+
 
 # Handle language selection and save the user's choice
 async def handle_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -200,6 +225,7 @@ async def handle_language_selection(update: Update, context: ContextTypes.DEFAUL
 
     session.close()
 
+
 # Show the main menu after a user has selected their language and joined the channel
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, user):
     session = Session()
@@ -214,51 +240,100 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     chance_circle_button = translate_text("🎯 Chance Circle", user.preferred_language)
     ticket_button = translate_text("🎫 Create Ticket", user.preferred_language)
     referral_link_button = translate_text("🔗 Referral Link", user.preferred_language)
-    increment_credit_button = translate_text("💳 Increase Credit", user.preferred_language)
-    manage_conversion_rate_button = translate_text("💲 Manage Conversion Rate", user.preferred_language)
+    increment_credit_button = translate_text(
+        "💳 Increase Credit", user.preferred_language
+    )
+    manage_conversion_rate_button = translate_text(
+        "💲 Manage Conversion Rate", user.preferred_language
+    )
 
     add_order_button = translate_text("➕ Add Order", user.preferred_language)
     view_order_button = translate_text("🔍 View Order", user.preferred_language)
 
     # Admin-specific menu items
     if user.is_admin:
-        account_info_button = translate_text("ℹ️ Account Information", user.preferred_language)
-        view_agencies_button = translate_text("📊 View Agency Requests", user.preferred_language)
+        account_info_button = translate_text(
+            "ℹ️ Account Information", user.preferred_language
+        )
+        view_agencies_button = translate_text(
+            "📊 View Agency Requests", user.preferred_language
+        )
         view_tickets_button = translate_text("🎟️ View Tickets", user.preferred_language)
 
-        manage_off_codes_button = translate_text("🔧 Manage Off Codes", user.preferred_language)
-        manage_unit_value_button = translate_text("💲 Manage Unit Value", user.preferred_language)
-        broadcast_button = translate_text("📢 Broadcast Message", user.preferred_language)
+        manage_off_codes_button = translate_text(
+            "🔧 Manage Off Codes", user.preferred_language
+        )
+        manage_unit_value_button = translate_text(
+            "💲 Manage Unit Value", user.preferred_language
+        )
+        broadcast_button = translate_text(
+            "📢 Broadcast Message", user.preferred_language
+        )
         keyboard = [
             [InlineKeyboardButton(add_order_button, callback_data="add_order")],
             [InlineKeyboardButton(view_order_button, callback_data="view_order")],
             [InlineKeyboardButton(account_info_button, callback_data="account_info")],
-            [InlineKeyboardButton(view_agencies_button, callback_data="view_agency_requests")],
+            [
+                InlineKeyboardButton(
+                    view_agencies_button, callback_data="view_agency_requests"
+                )
+            ],
             [InlineKeyboardButton(view_tickets_button, callback_data="view_tickets")],
             [InlineKeyboardButton(settings_button, callback_data="settings")],
             [InlineKeyboardButton(chance_circle_button, callback_data="chance_circle")],
             [InlineKeyboardButton(referral_link_button, callback_data="referral_link")],
-            [InlineKeyboardButton(increment_credit_button, callback_data="increment_credit")],
-            [InlineKeyboardButton(manage_off_codes_button, callback_data="manage_off_codes")],
-            [InlineKeyboardButton(manage_unit_value_button, callback_data="manage_unit_value")],
+            [
+                InlineKeyboardButton(
+                    increment_credit_button, callback_data="increment_credit"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    manage_off_codes_button, callback_data="manage_off_codes"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    manage_unit_value_button, callback_data="manage_unit_value"
+                )
+            ],
             [InlineKeyboardButton(broadcast_button, callback_data="broadcast_message")],
         ]
-        keyboard.append([InlineKeyboardButton(manage_conversion_rate_button, callback_data="manage_conversion_rate")])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    manage_conversion_rate_button,
+                    callback_data="manage_conversion_rate",
+                )
+            ]
+        )
 
     # Regular user-specific menu items
     else:
-        account_info_button = translate_text("ℹ️ Account Information", user.preferred_language)
-        request_agency_button = translate_text("🏢 Request Agency", user.preferred_language)
+        account_info_button = translate_text(
+            "ℹ️ Account Information", user.preferred_language
+        )
+        request_agency_button = translate_text(
+            "🏢 Request Agency", user.preferred_language
+        )
         keyboard = [
             [InlineKeyboardButton(add_order_button, callback_data="add_order")],
             [InlineKeyboardButton(view_order_button, callback_data="view_order")],
             [InlineKeyboardButton(account_info_button, callback_data="account_info")],
-            [InlineKeyboardButton(request_agency_button, callback_data="request_agency")],
+            [
+                InlineKeyboardButton(
+                    request_agency_button, callback_data="request_agency"
+                )
+            ],
             [InlineKeyboardButton(settings_button, callback_data="settings")],
             [InlineKeyboardButton(chance_circle_button, callback_data="chance_circle")],
             [InlineKeyboardButton(ticket_button, callback_data="create_ticket")],
             [InlineKeyboardButton(referral_link_button, callback_data="referral_link")],
-            [InlineKeyboardButton(increment_credit_button, callback_data="increment_credit")],
+            [
+                InlineKeyboardButton(
+                    increment_credit_button, callback_data="increment_credit"
+                )
+            ],
         ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -272,21 +347,29 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     )
 
     if update.callback_query:
-        await safe_edit_message_text(update, context, new_text=welcome_message, reply_markup=reply_markup)
+        await safe_edit_message_text(
+            update, context, new_text=welcome_message, reply_markup=reply_markup
+        )
     elif update.message:
         await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
     session.close()  # Close the session here
 
+
 # Safely edit a message without causing Telegram errors
-async def safe_edit_message_text(update: Update, context: ContextTypes.DEFAULT_TYPE, new_text: str, reply_markup=None):
+async def safe_edit_message_text(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, new_text: str, reply_markup=None
+):
     try:
         current_message = update.callback_query.message.text
         if current_message != new_text:
-            await update.callback_query.message.edit_text(text=new_text, reply_markup=reply_markup)
+            await update.callback_query.message.edit_text(
+                text=new_text, reply_markup=reply_markup
+            )
     except Exception as e:
         if "Message is not modified" not in str(e):
             raise
+
 
 # Check if the user has joined the required channel
 async def check_channel_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -294,7 +377,9 @@ async def check_channel_membership(update: Update, context: ContextTypes.DEFAULT
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
     try:
-        member = await context.bot.get_chat_member(chat_id="@sultanpanel", user_id=user.num_id)
+        member = await context.bot.get_chat_member(
+            chat_id="@sultanpanel", user_id=user.num_id
+        )
 
         if member.status in ["member", "administrator", "creator"]:
             await show_main_menu(update, context, user)
@@ -305,19 +390,34 @@ async def check_channel_membership(update: Update, context: ContextTypes.DEFAULT
 
     session.close()
 
+
 # Prompt the user to join the required channel
-async def prompt_user_to_join(update: Update, context: ContextTypes.DEFAULT_TYPE, language):
-    join_message = translate_text("🔗 Please join our channel @sultanpanel to continue 😊", language)
-    keyboard = [[InlineKeyboardButton("✅ Check Membership", callback_data="check_membership")]]
+async def prompt_user_to_join(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, language
+):
+    join_message = translate_text(
+        "🔗 Please join our channel @sultanpanel to continue 😊", language
+    )
+    keyboard = [
+        [InlineKeyboardButton("✅ Check Membership", callback_data="check_membership")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     new_text = f"{join_message}\n\n👉 [Click here to join the channel](https://t.me/sultanpanel)"
 
     if update.callback_query:
         current_message = update.callback_query.message
-        if current_message.text != new_text or current_message.reply_markup != reply_markup:
-            await update.callback_query.edit_message_text(new_text, reply_markup=reply_markup, parse_mode="Markdown")
+        if (
+            current_message.text != new_text
+            or current_message.reply_markup != reply_markup
+        ):
+            await update.callback_query.edit_message_text(
+                new_text, reply_markup=reply_markup, parse_mode="Markdown"
+            )
     else:
-        await update.message.reply_text(new_text, reply_markup=reply_markup, parse_mode="Markdown")
+        await update.message.reply_text(
+            new_text, reply_markup=reply_markup, parse_mode="Markdown"
+        )
+
 
 # Handle the settings menu where users can change their preferences
 async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -325,15 +425,20 @@ async def handle_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
-    keyboard = [[InlineKeyboardButton(lang, callback_data=lang)] for lang in languages.keys()]
+    keyboard = [
+        [InlineKeyboardButton(lang, callback_data=lang)] for lang in languages.keys()
+    ]
     back_button = translate_text("🔙 Back", user.preferred_language)
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    settings_message = translate_text("🌍 Please choose your language 🗣️:", user.preferred_language)
+    settings_message = translate_text(
+        "🌍 Please choose your language 🗣️:", user.preferred_language
+    )
 
     await query.edit_message_text(settings_message, reply_markup=reply_markup)
 
     session.close()
+
 
 # Handle the "Chance Circle" feature, where users can win extra credits daily
 async def handle_chance_circle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -370,7 +475,9 @@ async def handle_chance_circle(update: Update, context: ContextTypes.DEFAULT_TYP
 
     session.close()
 
+
 import requests
+
 
 # Fetch the current conversion rate from the database
 async def get_dollar_to_toman_rate():
@@ -389,21 +496,33 @@ async def get_dollar_to_toman_rate():
     session.close()
     return rate
 
+
 # Handle the conversion rate management for admins
-async def handle_manage_conversion_rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_manage_conversion_rate(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
     query = update.callback_query
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
     if user.is_admin:
         await query.edit_message_text(
-            translate_text("💲 Please enter the new conversion rate (Toman per Dollar):", user.preferred_language)
+            translate_text(
+                "💲 Please enter the new conversion rate (Toman per Dollar):",
+                user.preferred_language,
+            )
         )
         context.user_data["awaiting_conversion_rate"] = True
     else:
-        await query.edit_message_text(translate_text("❌ You do not have permission to perform this action.", user.preferred_language))
+        await query.edit_message_text(
+            translate_text(
+                "❌ You do not have permission to perform this action.",
+                user.preferred_language,
+            )
+        )
 
     session.close()
+
 
 # Display the user's account information, including credits and earnings
 async def handle_account_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -416,22 +535,24 @@ async def handle_account_info(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     membership_duration = (datetime.now(timezone.utc) - user.join_date).days
     dollar_to_toman_rate = await get_dollar_to_toman_rate()
-    
+
     # Convert credits to dollars and tomans
     credit_dollars = user.remaining_credit / 100
     credit_toman = credit_dollars * dollar_to_toman_rate
     credit_info = f"{credit_dollars:.2f}$ ({int(credit_toman):,} Toman)"
-    
+
     # Convert referral credits to dollars and tomans
     referral_dollars = user.referral_credit / 100
     referral_toman = referral_dollars * dollar_to_toman_rate
     referral_info = f"{referral_dollars:.2f}$ ({int(referral_toman):,} Toman)"
-    
+
     # Convert sub-transaction earnings to dollars and tomans
     sub_transaction_dollars = user.sub_transaction_earnings / 100
     sub_transaction_toman = sub_transaction_dollars * dollar_to_toman_rate
-    sub_transaction_info = f"{sub_transaction_dollars:.2f}$ ({int(sub_transaction_toman):,} Toman)"
-    
+    sub_transaction_info = (
+        f"{sub_transaction_dollars:.2f}$ ({int(sub_transaction_toman):,} Toman)"
+    )
+
     # Form the account information text
     account_info_text = (
         f"ℹ️ Account Information:\n\n"
@@ -441,7 +562,7 @@ async def handle_account_info(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"🎁 Credit from Referrals: {referral_info}\n"
         f"💵 Earnings from Sub-transactions: {sub_transaction_info}"
     )
-    
+
     account_info_text = translate_text(account_info_text, user.preferred_language)
     back_button = translate_text("🔙 Back to Main Menu", user.preferred_language)
     keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
@@ -449,6 +570,7 @@ async def handle_account_info(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     await query.edit_message_text(account_info_text, reply_markup=reply_markup)
     session.close()
+
 
 # Handle the agency request process for users
 async def handle_request_agency(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -459,45 +581,78 @@ async def handle_request_agency(update: Update, context: ContextTypes.DEFAULT_TY
     keyboard = []
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    request_text = translate_text("💼 Please enter your daily sales (e.g., 200 dollars or 200 rials): 💼", user.preferred_language)
+    request_text = translate_text(
+        "💼 Please enter your daily sales (e.g., 200 dollars or 200 rials): 💼",
+        user.preferred_language,
+    )
     await query.message.edit_text(request_text)
 
     context.user_data["awaiting_sales_input"] = True
     session.close()
 
+
 # Admin function to view pending agency requests
-async def handle_view_agency_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_view_agency_requests(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
     query = update.callback_query
     session = Session()
 
-    admin = session.query(User).filter_by(num_id=update.effective_user.id, is_admin=True).first()
+    admin = (
+        session.query(User)
+        .filter_by(num_id=update.effective_user.id, is_admin=True)
+        .first()
+    )
     if admin:
-        pending_requests = session.query(AgencyRequest).filter_by(status="pending").all()
+        pending_requests = (
+            session.query(AgencyRequest).filter_by(status="pending").all()
+        )
 
         if pending_requests:
             keyboard = []
-            message_text = translate_text("📋 *Requests:*\n\n", admin.preferred_language)
+            message_text = translate_text(
+                "📋 *Requests:*\n\n", admin.preferred_language
+            )
 
             for request in pending_requests:
                 user = session.query(User).filter_by(id=request.user_id).first()
-                keyboard.append([
-                    InlineKeyboardButton(f"💼 {request.daily_sales}", callback_data="noop"),
-                    InlineKeyboardButton("✅", callback_data=f"approve_{request.id}"),
-                    InlineKeyboardButton("❌", callback_data=f"reject_{request.id}"),
-                ])
+                keyboard.append(
+                    [
+                        InlineKeyboardButton(
+                            f"💼 {request.daily_sales}", callback_data="noop"
+                        ),
+                        InlineKeyboardButton(
+                            "✅", callback_data=f"approve_{request.id}"
+                        ),
+                        InlineKeyboardButton(
+                            "❌", callback_data=f"reject_{request.id}"
+                        ),
+                    ]
+                )
 
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.edit_text(text=message_text, reply_markup=reply_markup, parse_mode="Markdown")
+            await query.message.edit_text(
+                text=message_text, reply_markup=reply_markup, parse_mode="Markdown"
+            )
         else:
             back_button = translate_text("🔙 Back", admin.preferred_language)
             keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            await query.edit_message_text(translate_text("❌ There are no pending agency requests. ❌", admin.preferred_language), reply_markup=reply_markup)
+            await query.edit_message_text(
+                translate_text(
+                    "❌ There are no pending agency requests. ❌",
+                    admin.preferred_language,
+                ),
+                reply_markup=reply_markup,
+            )
     session.close()
 
+
 # Handle the action of approving or rejecting an agency request
-async def handle_agency_request_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_agency_request_action(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
     query = update.callback_query
     session = Session()
 
@@ -522,17 +677,19 @@ async def handle_agency_request_action(update: Update, context: ContextTypes.DEF
                     f"🆔 User ID: {user.num_id}\n"
                     f"💼 Daily Sales: {request.daily_sales}\n"
                     f"📅 Request ID: {request.id}"
-                )
+                ),
             )
 
-            await context.bot.send_message(
-                chat_id=REPRESENTATIVES, text=user
-            )
+            await context.bot.send_message(chat_id=REPRESENTATIVES, text=user)
         elif action == "reject":
             request.status = "rejected"
             session.commit()
             await context.bot.send_message(
-                chat_id=user.num_id, text=translate_text("❌ Your agency request has been rejected. ❌", user.preferred_language)
+                chat_id=user.num_id,
+                text=translate_text(
+                    "❌ Your agency request has been rejected. ❌",
+                    user.preferred_language,
+                ),
             )
 
         session.delete(request)
@@ -541,6 +698,7 @@ async def handle_agency_request_action(update: Update, context: ContextTypes.DEF
         await handle_view_agency_requests(update, context)
     session.close()
 
+
 # Handle the "back" action, typically returning to the main menu
 async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -548,6 +706,7 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
     await show_main_menu(update, context, user)
     session.close()
+
 
 # Handle the creation of support tickets
 async def handle_create_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -558,23 +717,37 @@ async def handle_create_ticket(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = []
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(translate_text("🎫 Please enter the title of your ticket: 📝", user.preferred_language),reply_markup=reply_markup)
+    await query.edit_message_text(
+        translate_text(
+            "🎫 Please enter the title of your ticket: 📝", user.preferred_language
+        ),
+        reply_markup=reply_markup,
+    )
     context.user_data["awaiting_ticket_title"] = True
     context.user_data["awaiting_ticket_description"] = False
     session.close()
+
 
 # Admin function to view open support tickets
 async def handle_view_tickets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
 
-    admin = session.query(User).filter_by(num_id=update.effective_user.id, is_admin=True).first()
+    admin = (
+        session.query(User)
+        .filter_by(num_id=update.effective_user.id, is_admin=True)
+        .first()
+    )
     if admin:
         open_tickets = session.query(Ticket).filter_by(status="open").all()
 
         if open_tickets:
             keyboard = [
-                [InlineKeyboardButton(ticket.title, callback_data=f"view_ticket_{ticket.id}")]
+                [
+                    InlineKeyboardButton(
+                        ticket.title, callback_data=f"view_ticket_{ticket.id}"
+                    )
+                ]
                 for ticket in open_tickets
             ]
             back_button = translate_text("🔙 Back", admin.preferred_language)
@@ -590,24 +763,33 @@ async def handle_view_tickets(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                translate_text("❌ There are no open tickets. ❌", admin.preferred_language),
+                translate_text(
+                    "❌ There are no open tickets. ❌", admin.preferred_language
+                ),
                 reply_markup=reply_markup,
             )
 
     session.close()
+
 
 # Handle viewing the details of an individual ticket
 async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
 
-    admin = session.query(User).filter_by(num_id=update.effective_user.id, is_admin=True).first()
+    admin = (
+        session.query(User)
+        .filter_by(num_id=update.effective_user.id, is_admin=True)
+        .first()
+    )
 
     if admin:
         try:
             action, ticket_id = query.data.split("_", 1)
         except ValueError:
-            await query.edit_message_text("⚠️ Invalid data received, please try again. ⚠️")
+            await query.edit_message_text(
+                "⚠️ Invalid data received, please try again. ⚠️"
+            )
             return
 
         ticket = session.query(Ticket).filter_by(id=ticket_id.split("_")[1]).first()
@@ -625,6 +807,7 @@ async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
 
     session.close()
+
 
 # General message handler to process various user inputs based on context
 async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -648,10 +831,19 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             session.commit()
 
-            success_message = translate_text(f"✅ Conversion rate updated to {new_rate} Toman per Dollar.", user.preferred_language)
-            await update.message.reply_text(success_message,reply_markup=reply_markup)
+            success_message = translate_text(
+                f"✅ Conversion rate updated to {new_rate} Toman per Dollar.",
+                user.preferred_language,
+            )
+            await update.message.reply_text(success_message, reply_markup=reply_markup)
         except ValueError:
-            await update.message.reply_text(translate_text("❌ Invalid rate. Please enter a valid number.", user.preferred_language),reply_markup=reply_markup)
+            await update.message.reply_text(
+                translate_text(
+                    "❌ Invalid rate. Please enter a valid number.",
+                    user.preferred_language,
+                ),
+                reply_markup=reply_markup,
+            )
 
         context.user_data["awaiting_conversion_rate"] = False
         await show_main_menu(update, context, user)
@@ -661,23 +853,37 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             unit = session.query(Unit).filter_by(name="default").first()
 
             if not unit:
-                await update.message.reply_text(translate_text("❌ Unit value is not set. Please contact an admin. ❌",user.preferred_language),reply_markup=reply_markup)
+                await update.message.reply_text(
+                    translate_text(
+                        "❌ Unit value is not set. Please contact an admin. ❌",
+                        user.preferred_language,
+                    ),
+                    reply_markup=reply_markup,
+                )
                 return
 
             unit_value_cents = unit.value
-            credit_amount = custom_amount * (100 / unit_value_cents)  # Convert dollars to units
+            credit_amount = custom_amount * (
+                100 / unit_value_cents
+            )  # Convert dollars to units
 
             user.remaining_credit += credit_amount
             session.commit()
 
             success_message = translate_text(
                 f"✅ {credit_amount:.2f} units have been added to your account!",
-                user.preferred_language
+                user.preferred_language,
             )
-            await update.message.reply_text(success_message,reply_markup=reply_markup)
+            await update.message.reply_text(success_message, reply_markup=reply_markup)
         except ValueError:
-            await update.message.reply_text(translate_text("❌ Invalid amount. Please enter a valid number. ❌", user.preferred_language),reply_markup=reply_markup)
-        
+            await update.message.reply_text(
+                translate_text(
+                    "❌ Invalid amount. Please enter a valid number. ❌",
+                    user.preferred_language,
+                ),
+                reply_markup=reply_markup,
+            )
+
         context.user_data["awaiting_custom_increment"] = False
         await show_main_menu(update, context, user)
 
@@ -697,7 +903,9 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             except Exception as e:
                 print(f"⚠️ Failed to send message to {user.username}: {e}")
 
-        await update.message.reply_text(f"✅ Message sent to all {broadcast_to}. 📨",reply_markup=reply_markup)
+        await update.message.reply_text(
+            f"✅ Message sent to all {broadcast_to}. 📨", reply_markup=reply_markup
+        )
         context.user_data["awaiting_broadcast_message"] = False
         await show_main_menu(update, context, user)
 
@@ -712,10 +920,9 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         confirmation_text = translate_text(
             f"✅ Your request has been added. Admins will review it soon. Your request ID: #{request_id} 🎉",
             user.preferred_language,
-            
         )
 
-        await update.message.reply_text(confirmation_text,reply_markup=reply_markup)
+        await update.message.reply_text(confirmation_text, reply_markup=reply_markup)
 
         context.user_data["awaiting_sales_input"] = False
         await show_main_menu(update, context, user)
@@ -725,7 +932,11 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         off_code = update.message.text.strip()
         context.user_data["off_code"] = off_code
         await update.message.reply_text(
-            translate_text("🎫 Please enter the discount percent (e.g., 20):", user.preferred_language),reply_markup=reply_markup
+            translate_text(
+                "🎫 Please enter the discount percent (e.g., 20):",
+                user.preferred_language,
+            ),
+            reply_markup=reply_markup,
         )
         context.user_data["awaiting_off_code"] = False
         context.user_data["awaiting_discount_percent"] = True
@@ -738,7 +949,10 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         session.add(new_code)
         session.commit()
 
-        await update.message.reply_text(f"✅ Discount code {off_code} with {discount_percent}% discount has been added. 🎁",reply_markup=reply_markup)
+        await update.message.reply_text(
+            f"✅ Discount code {off_code} with {discount_percent}% discount has been added. 🎁",
+            reply_markup=reply_markup,
+        )
         context.user_data["awaiting_discount_percent"] = False
         context.user_data["off_code"] = None
         await show_main_menu(update, context, user)
@@ -757,13 +971,15 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                 f"✅ {int(discounted_amount)} units have been added to your credit! 💵",
                 user.preferred_language,
             )
-            await update.message.reply_text(success_message,reply_markup=reply_markup)
+            await update.message.reply_text(success_message, reply_markup=reply_markup)
         else:
             invalid_code_message = translate_text(
                 "❌ Invalid discount code. Adding full amount to your credit. ❌",
                 user.preferred_language,
             )
-            await update.message.reply_text(invalid_code_message,reply_markup=reply_markup)
+            await update.message.reply_text(
+                invalid_code_message, reply_markup=reply_markup
+            )
             await add_credit_to_user(update, context, user)
 
         context.user_data["awaiting_discount_code"] = False
@@ -773,7 +989,11 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif context.user_data.get("awaiting_ticket_title"):
         context.user_data["ticket_title"] = update.message.text
         await update.message.reply_text(
-            translate_text("🎫 Please enter the description of your ticket: 📝", user.preferred_language),reply_markup=reply_markup
+            translate_text(
+                "🎫 Please enter the description of your ticket: 📝",
+                user.preferred_language,
+            ),
+            reply_markup=reply_markup,
         )
         context.user_data["awaiting_ticket_title"] = False
         context.user_data["awaiting_ticket_description"] = True
@@ -782,12 +1002,18 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif context.user_data.get("awaiting_ticket_description"):
         ticket_description = update.message.text
         ticket_title = context.user_data.get("ticket_title")
-        new_ticket = Ticket(user_id=user.id, title=ticket_title, description=ticket_description)
+        new_ticket = Ticket(
+            user_id=user.id, title=ticket_title, description=ticket_description
+        )
         session.add(new_ticket)
         session.commit()
 
         await update.message.reply_text(
-            translate_text("✅ Your ticket has been created. Our support team will get back to you soon. 🎟️", user.preferred_language),reply_markup=reply_markup
+            translate_text(
+                "✅ Your ticket has been created. Our support team will get back to you soon. 🎟️",
+                user.preferred_language,
+            ),
+            reply_markup=reply_markup,
         )
 
         context.user_data["awaiting_ticket_description"] = False
@@ -809,7 +1035,10 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             ticket.status = "closed"
             session.commit()
 
-            await update.message.reply_text("✅ The ticket has been closed and the response has been sent to the user. 📧",reply_markup=reply_markup)
+            await update.message.reply_text(
+                "✅ The ticket has been closed and the response has been sent to the user. 📧",
+                reply_markup=reply_markup,
+            )
 
         context.user_data["awaiting_ticket_response"] = False
         await show_main_menu(update, context, user)
@@ -832,13 +1061,18 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         if service:
             context.user_data["service_id"] = service_id
             await update.message.reply_text(
-                translate_text("🔗 Please enter the Link: 🌐", user.preferred_language),reply_markup=reply_markup
+                translate_text("🔗 Please enter the Link: 🌐", user.preferred_language),
+                reply_markup=reply_markup,
             )
             context.user_data["awaiting_link"] = True
             context.user_data["awaiting_service_id"] = False
         else:
             await update.message.reply_text(
-                translate_text("❌ Invalid Service ID. Please try again. ❌", user.preferred_language),reply_markup=reply_markup
+                translate_text(
+                    "❌ Invalid Service ID. Please try again. ❌",
+                    user.preferred_language,
+                ),
+                reply_markup=reply_markup,
             )
             context.user_data["awaiting_service_id"] = True
 
@@ -847,7 +1081,8 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         link = update.message.text.strip()
         context.user_data["link"] = link
         await update.message.reply_text(
-            translate_text("🔢 Please enter the Quantity: 💲", user.preferred_language),reply_markup=reply_markup
+            translate_text("🔢 Please enter the Quantity: 💲", user.preferred_language),
+            reply_markup=reply_markup,
         )
         context.user_data["awaiting_quantity"] = True
         context.user_data["awaiting_link"] = False
@@ -875,9 +1110,15 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             if unit:
                 unit_value_cents = unit.value
             else:
-                await update.message.reply_text(translate_text("❌ Unit value is not set. Please contact an admin. ❌",user.preferred_language),reply_markup=reply_markup)
+                await update.message.reply_text(
+                    translate_text(
+                        "❌ Unit value is not set. Please contact an admin. ❌",
+                        user.preferred_language,
+                    ),
+                    reply_markup=reply_markup,
+                )
                 session.close()
-                
+
                 return
 
             total_cost_in_credits = dollar_amount * (100 / unit_value_cents)
@@ -909,42 +1150,62 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                         service_id=service_id,
                         link=link,
                         quantity=quantity,
-                        status="Pending"
+                        status="Pending",
                     )
                     session.add(new_order)
                     session.commit()
 
                     await update.message.reply_text(
-                        translate_text(f"🛒 Order placed successfully!\n\n**Order ID:** `{order_id}` 📄",user.preferred_language),
-                        parse_mode="Markdown",reply_markup=reply_markup
+                        translate_text(
+                            f"🛒 Order placed successfully!\n\n**Order ID:** `{order_id}` 📄",
+                            user.preferred_language,
+                        ),
+                        parse_mode="Markdown",
+                        reply_markup=reply_markup,
                     )
                     from config import ORDER_CHANNEL_ID
+
                     await context.bot.send_message(
-                    chat_id=ORDER_CHANNEL_ID,  # Replace with your actual notification channel ID or chat ID
-                    text=(
-                        f"📢 New Order Received:\n"
-                        f"👤 User: @{user.username}\n"
-                        f"🆔 Order ID: {order_id}\n"
-                        f"💼 Service: {service['name']}\n"
-                        f"🔗 Link: {link}\n"
-                        f"🔢 Quantity: {quantity}"
-                    )
+                        chat_id=ORDER_CHANNEL_ID,  # Replace with your actual notification channel ID or chat ID
+                        text=(
+                            f"📢 New Order Received:\n"
+                            f"👤 User: @{user.username}\n"
+                            f"🆔 Order ID: {order_id}\n"
+                            f"💼 Service: {service['name']}\n"
+                            f"🔗 Link: {link}\n"
+                            f"🔢 Quantity: {quantity}"
+                        ),
                     )
 
                     await update.message.reply_text(
-                        translate_text(f"💰 {total_cost_in_credits:.2f} credits have been deducted from your account. 💸",user.preferred_language)
+                        translate_text(
+                            f"💰 {total_cost_in_credits:.2f} credits have been deducted from your account. 💸",
+                            user.preferred_language,
+                        )
                     )
                 else:
                     await update.message.reply_text(
-                        translate_text("❌ There was an issue placing your order. Please try again later. ❌",user.preferred_language),reply_markup=reply_markup
+                        translate_text(
+                            "❌ There was an issue placing your order. Please try again later. ❌",
+                            user.preferred_language,
+                        ),
+                        reply_markup=reply_markup,
                     )
             else:
                 await update.message.reply_text(
-                    translate_text("❌ Insufficient credit to place this order. Please add more credit and try again. ❌",user.preferred_language),reply_markup=reply_markup
+                    translate_text(
+                        "❌ Insufficient credit to place this order. Please add more credit and try again. ❌",
+                        user.preferred_language,
+                    ),
+                    reply_markup=reply_markup,
                 )
         else:
             await update.message.reply_text(
-                translate_text(f"❌ Invalid quantity or service ID. Please try again. ❌", user.preferred_language),reply_markup=reply_markup
+                translate_text(
+                    f"❌ Invalid quantity or service ID. Please try again. ❌",
+                    user.preferred_language,
+                ),
+                reply_markup=reply_markup,
             )
 
         context.user_data["awaiting_quantity"] = False
@@ -967,7 +1228,11 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         session.commit()
 
         await update.message.reply_text(
-            translate_text(f"✅ Unit value set to ${unit_value_dollars}. 💲", user.preferred_language),reply_markup=reply_markup
+            translate_text(
+                f"✅ Unit value set to ${unit_value_dollars}. 💲",
+                user.preferred_language,
+            ),
+            reply_markup=reply_markup,
         )
         context.user_data["awaiting_unit_value"] = False
         await show_main_menu(update, context, user)
@@ -977,14 +1242,18 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         response = update.message.text.strip().lower()
 
         if response == "yes":
-            ask_code_message = translate_text("🎟️ Please enter your discount code: 💰", user.preferred_language)
-            await update.message.reply_text(ask_code_message,reply_markup=reply_markup)
+            ask_code_message = translate_text(
+                "🎟️ Please enter your discount code: 💰", user.preferred_language
+            )
+            await update.message.reply_text(ask_code_message, reply_markup=reply_markup)
             context.user_data["awaiting_discount_code"] = True
         else:
-            user.remaining_credit += int(context.user_data['selected_increment_amount'])
+            user.remaining_credit += int(context.user_data["selected_increment_amount"])
             session.commit()
-            ask_code_message = translate_text("✅ Unit added to account. 🤑", user.preferred_language)
-            await update.message.reply_text(ask_code_message,reply_markup=reply_markup)
+            ask_code_message = translate_text(
+                "✅ Unit added to account. 🤑", user.preferred_language
+            )
+            await update.message.reply_text(ask_code_message, reply_markup=reply_markup)
         await show_main_menu(update, context, user)
 
     # Handling discount code deletion input from admin
@@ -995,14 +1264,19 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         if code_to_delete:
             session.delete(code_to_delete)
             session.commit()
-            await update.message.reply_text(f"✅ Discount code {off_code} has been deleted. 🗑️")
+            await update.message.reply_text(
+                f"✅ Discount code {off_code} has been deleted. 🗑️"
+            )
         else:
-            await update.message.reply_text(f"❌ Discount code {off_code} not found. ❌")
+            await update.message.reply_text(
+                f"❌ Discount code {off_code} not found. ❌"
+            )
 
         context.user_data["awaiting_off_code_deletion"] = False
         await show_main_menu(update, context, user)
 
     session.close()
+
 
 # Handle managing orders (viewing, adding, etc.)
 async def handle_manage_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1023,6 +1297,7 @@ async def handle_manage_order(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text("🛒 Manage Order 🛠️", reply_markup=reply_markup)
     session.close()
 
+
 # Function to add credit to user's account
 async def add_credit_to_user(update, context, user):
     session = Session()
@@ -1038,16 +1313,30 @@ async def add_credit_to_user(update, context, user):
             user.remaining_credit += increment_amount
             session.commit()
 
-            success_message = translate_text(f"✅ {increment_amount} units have been added to your credit! 💰", user.preferred_language)
+            success_message = translate_text(
+                f"✅ {increment_amount} units have been added to your credit! 💰",
+                user.preferred_language,
+            )
             await update.message.reply_text(success_message)
         else:
-            await update.message.reply_text(translate_text("❌ Unable to find the user in the database. ❌",user.preferred_language))
+            await update.message.reply_text(
+                translate_text(
+                    "❌ Unable to find the user in the database. ❌",
+                    user.preferred_language,
+                )
+            )
 
     except Exception as e:
-        await update.message.reply_text(translate_text("❌ An error occurred while adding credit. Please try again later. ❌",user.preferred_language))
+        await update.message.reply_text(
+            translate_text(
+                "❌ An error occurred while adding credit. Please try again later. ❌",
+                user.preferred_language,
+            )
+        )
 
     finally:
         session.close()
+
 
 # Handle generating and displaying the user's referral link
 async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1068,7 +1357,7 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
         "🔐 پرداخت مطمئن و 100% امن\n\n"
         "👇🏻 همین الان وارد این ربات فوق العاده شو\n\n"
         f"🔗 [Click here to join]({referral_link})",  # Including the referral link at the end
-        user.preferred_language
+        user.preferred_language,
     )
 
     back_button = translate_text("🔙 Back", user.preferred_language)
@@ -1078,13 +1367,14 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
     # Send the referral message with a back button
     await context.bot.send_photo(
         chat_id=query.message.chat_id,
-        photo=open('icon.jpg', 'rb'),  # Assuming icon.jpeg is in the root directory
+        photo=open("icon.jpg", "rb"),  # Assuming icon.jpeg is in the root directory
         caption=referral_message,
         reply_markup=reply_markup,
-        parse_mode="Markdown"
+        parse_mode="Markdown",
     )
 
     session.close()
+
 
 # Handle the admin management section, including adding and removing admins
 async def handle_admin_management(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1105,6 +1395,7 @@ async def handle_admin_management(update: Update, context: ContextTypes.DEFAULT_
 
     await query.edit_message_text("🔧 Admin Management ⚙️", reply_markup=reply_markup)
     session.close()
+
 
 # Handle the management of discount codes by admins
 async def handle_manage_off_codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1127,6 +1418,7 @@ async def handle_manage_off_codes(update: Update, context: ContextTypes.DEFAULT_
     await query.edit_message_text("🔧 Manage Off Codes 🛠️", reply_markup=reply_markup)
     session.close()
 
+
 # Handle adding new discount codes
 async def handle_add_off_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1137,17 +1429,25 @@ async def handle_add_off_code(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("🎟️ Please enter the off code (e.g., SAVE20):", user.preferred_language),reply_markup=reply_markup
+        translate_text(
+            "🎟️ Please enter the off code (e.g., SAVE20):", user.preferred_language
+        ),
+        reply_markup=reply_markup,
     )
     context.user_data["awaiting_off_code"] = True
     session.close()
+
 
 # Handle viewing existing discount codes
 async def handle_view_off_codes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
 
-    admin = session.query(User).filter_by(num_id=update.effective_user.id, is_admin=True).first()
+    admin = (
+        session.query(User)
+        .filter_by(num_id=update.effective_user.id, is_admin=True)
+        .first()
+    )
     back_button = translate_text("🔙 Back", admin.preferred_language)
     keyboard = []
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
@@ -1156,12 +1456,23 @@ async def handle_view_off_codes(update: Update, context: ContextTypes.DEFAULT_TY
         off_codes = session.query(DiscountCode).all()
 
         if off_codes:
-            code_list = "\n".join([f"{code.code} - {code.discount_percent}%" for code in off_codes])
-            await query.message.reply_text(translate_text(f"📋 Discount Codes:\n\n{code_list} 🎟️",admin.preferred_language))
+            code_list = "\n".join(
+                [f"{code.code} - {code.discount_percent}%" for code in off_codes]
+            )
+            await query.message.reply_text(
+                translate_text(
+                    f"📋 Discount Codes:\n\n{code_list} 🎟️", admin.preferred_language
+                )
+            )
         else:
-            await query.message.reply_text(translate_text("❌ No discount codes available. ❌",admin.preferred_language))
+            await query.message.reply_text(
+                translate_text(
+                    "❌ No discount codes available. ❌", admin.preferred_language
+                )
+            )
 
     session.close()
+
 
 # Handle deletion of discount codes by admin
 async def handle_delete_off_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1173,7 +1484,10 @@ async def handle_delete_off_code(update: Update, context: ContextTypes.DEFAULT_T
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("🗑️ Please enter the off code you want to delete:", user.preferred_language),reply_markup=reply_markup
+        translate_text(
+            "🗑️ Please enter the off code you want to delete:", user.preferred_language
+        ),
+        reply_markup=reply_markup,
     )
     context.user_data["awaiting_off_code_deletion"] = True
     session.close()
@@ -1198,6 +1512,7 @@ async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT
     await query.edit_message_text("📢 Broadcast Message 📨", reply_markup=reply_markup)
     session.close()
 
+
 # Handle broadcasting messages to all users
 async def handle_broadcast_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1206,10 +1521,15 @@ async def handle_broadcast_users(update: Update, context: ContextTypes.DEFAULT_T
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("📢 Please enter the message to broadcast to all users: 📨", context.user_data.get("preferred_language")),reply_markup=reply_markup
+        translate_text(
+            "📢 Please enter the message to broadcast to all users: 📨",
+            context.user_data.get("preferred_language"),
+        ),
+        reply_markup=reply_markup,
     )
     context.user_data["broadcast_to"] = "users"
     context.user_data["awaiting_broadcast_message"] = True
+
 
 # Handle broadcasting messages to all admins
 async def handle_broadcast_admins(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1219,10 +1539,15 @@ async def handle_broadcast_admins(update: Update, context: ContextTypes.DEFAULT_
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("📢 Please enter the message to broadcast to all admins: 📨", context.user_data.get("preferred_language")),reply_markup=reply_markup
+        translate_text(
+            "📢 Please enter the message to broadcast to all admins: 📨",
+            context.user_data.get("preferred_language"),
+        ),
+        reply_markup=reply_markup,
     )
     context.user_data["broadcast_to"] = "admins"
     context.user_data["awaiting_broadcast_message"] = True
+
 
 # Handle incrementing the user's credit balance
 async def handle_increment_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1236,25 +1561,44 @@ async def handle_increment_credit(update: Update, context: ContextTypes.DEFAULT_
     # Predefined amounts in dollars (will be converted to units)
     unit = session.query(Unit).filter_by(name="default").first()
     if not unit:
-        await query.edit_message_text(translate_text("❌ Unit value is not set. Please contact an admin. ❌",user.preferred_language),reply_markup=reply_markup)
+        await query.edit_message_text(
+            translate_text(
+                "❌ Unit value is not set. Please contact an admin. ❌",
+                user.preferred_language,
+            ),
+            reply_markup=reply_markup,
+        )
         return
 
     unit_value_cents = unit.value
     amounts = [1, 5, 10, 50, 100]
     dollar_to_toman_rate = await get_dollar_to_toman_rate()
     keyboard = [
-        [InlineKeyboardButton(f"{amount}$ ({int(amount * dollar_to_toman_rate):,} toman)", callback_data=f"increment_{amount}")]
+        [
+            InlineKeyboardButton(
+                f"{amount}$ ({int(amount * dollar_to_toman_rate):,} toman)",
+                callback_data=f"increment_{amount}",
+            )
+        ]
         for amount in amounts
     ]
-    custom_amount_button = translate_text("🔢 Enter custom amount", user.preferred_language)
+    custom_amount_button = translate_text(
+        "🔢 Enter custom amount", user.preferred_language
+    )
     back_button = translate_text("🔙 Back", user.preferred_language)
-    keyboard.append([InlineKeyboardButton(custom_amount_button, callback_data="custom_increment")])
+    keyboard.append(
+        [InlineKeyboardButton(custom_amount_button, callback_data="custom_increment")]
+    )
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    increment_message = translate_text("💳 Please select the amount of credit you want to add: 🛒", user.preferred_language)
+    increment_message = translate_text(
+        "💳 Please select the amount of credit you want to add: 🛒",
+        user.preferred_language,
+    )
     await query.edit_message_text(increment_message, reply_markup=reply_markup)
     session.close()
+
 
 # Handle custom credit increment input
 async def handle_custom_increment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1266,13 +1610,19 @@ async def handle_custom_increment(update: Update, context: ContextTypes.DEFAULT_
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("💵 Please enter the amount in dollars (e.g., 15):", user.preferred_language),reply_markup=reply_markup
+        translate_text(
+            "💵 Please enter the amount in dollars (e.g., 15):", user.preferred_language
+        ),
+        reply_markup=reply_markup,
     )
     context.user_data["awaiting_custom_increment"] = True
     session.close()
 
+
 # Handle the selection of predefined credit increment amounts
-async def handle_increment_amount_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_increment_amount_selection(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
     query = update.callback_query
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
@@ -1286,7 +1636,13 @@ async def handle_increment_amount_selection(update: Update, context: ContextType
     unit = session.query(Unit).filter_by(name="default").first()
     if not unit:
 
-        await query.edit_message_text(translate_text("❌ Unit value is not set. Please contact an admin. ❌",user.preferred_language),reply_markup=reply_markup)
+        await query.edit_message_text(
+            translate_text(
+                "❌ Unit value is not set. Please contact an admin. ❌",
+                user.preferred_language,
+            ),
+            reply_markup=reply_markup,
+        )
         return
 
     unit_value_cents = unit.value
@@ -1296,12 +1652,16 @@ async def handle_increment_amount_selection(update: Update, context: ContextType
     user.remaining_credit += float(credit_amount)
     session.commit()
 
-    success_message = translate_text(f"✅ {credit_amount:.2f} units have been added to your account!", user.preferred_language)
-    
+    success_message = translate_text(
+        f"✅ {credit_amount:.2f} units have been added to your account!",
+        user.preferred_language,
+    )
+
     await query.edit_message_text(success_message)
     await show_main_menu(update, context, user)
 
     session.close()
+
 
 # Handle managing orders (adding, viewing, custom order ID input)
 async def handle_manage_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1311,9 +1671,11 @@ async def handle_manage_order(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     add_order_button = translate_text("➕ Add Order", user.preferred_language)
     view_order_button = translate_text("🔍 View Order", user.preferred_language)
-    custom_order_button = translate_text("🔍 Enter Custom Order ID", user.preferred_language)
+    custom_order_button = translate_text(
+        "🔍 Enter Custom Order ID", user.preferred_language
+    )
     back_button = translate_text("🔙 Back", user.preferred_language)
-    
+
     keyboard = [
         [InlineKeyboardButton(add_order_button, callback_data="add_order")],
         [InlineKeyboardButton(view_order_button, callback_data="view_order")],
@@ -1325,18 +1687,23 @@ async def handle_manage_order(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text("🛒 Manage Order 🛠️", reply_markup=reply_markup)
     session.close()
 
+
 # Handle the process of checking the status of an order
-async def process_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE, order_id):
+async def process_order_status(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, order_id
+):
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
-    response = requests.post(API_URL, data={"key": API_KEY, "action": "status", "order": order_id})
+    response = requests.post(
+        API_URL, data={"key": API_KEY, "action": "status", "order": order_id}
+    )
     order_status = response.json()
 
-    start_count = int(float(order_status.get('start_count') or 0))
-    
-    remains = float(order_status.get('remains', 0))
-    charge = float(order_status.get('charge', 0))
+    start_count = int(float(order_status.get("start_count") or 0))
+
+    remains = float(order_status.get("remains", 0))
+    charge = float(order_status.get("charge", 0))
     total_count = start_count + charge
 
     if total_count > 0:
@@ -1346,17 +1713,21 @@ async def process_order_status(update: Update, context: ContextTypes.DEFAULT_TYP
 
     percentage_complete = round(percentage_complete)
 
-    battery_status = "🔋" + "▓" * math.floor(percentage_complete / 10) + "░" * (10 - math.floor(percentage_complete / 10))
+    battery_status = (
+        "🔋"
+        + "▓" * math.floor(percentage_complete / 10)
+        + "░" * (10 - math.floor(percentage_complete / 10))
+    )
     progress_message = f"{battery_status} {percentage_complete}%"
 
     status_mapping = {
         "Pending": "🟡",
         "In Progress": "🔵",
         "Completed": "🟢",
-        "Canceled": "🔴"
+        "Canceled": "🔴",
     }
 
-    status = order_status.get('status', 'Unknown')
+    status = order_status.get("status", "Unknown")
     status_emoji = status_mapping.get(status, "❓")
 
     status_message = (
@@ -1382,13 +1753,18 @@ async def process_order_status(update: Update, context: ContextTypes.DEFAULT_TYP
     reply_markup = InlineKeyboardMarkup(keyboard)
     # Check if the update is a callback query or a regular message
     if update.callback_query:
-        await update.callback_query.message.reply_text(translated_message, parse_mode="Markdown",reply_markup=reply_markup)
+        await update.callback_query.message.reply_text(
+            translated_message, parse_mode="Markdown", reply_markup=reply_markup
+        )
     elif update.message:
-        await update.message.reply_text(translated_message, parse_mode="Markdown",reply_markup=reply_markup)
+        await update.message.reply_text(
+            translated_message, parse_mode="Markdown", reply_markup=reply_markup
+        )
 
     context.user_data["awaiting_order_id"] = False
     await show_main_menu(update, context, user)
     session.close()
+
 
 # Handle custom order ID input
 async def handle_custom_order_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1400,10 +1776,12 @@ async def handle_custom_order_id(update: Update, context: ContextTypes.DEFAULT_T
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("🔢 Please enter the Order ID: 📄", user.preferred_language),reply_markup=reply_markup
+        translate_text("🔢 Please enter the Order ID: 📄", user.preferred_language),
+        reply_markup=reply_markup,
     )
     context.user_data["awaiting_order_id_input"] = True
     session.close()
+
 
 # Handle adding a new order by selecting platform, service, and quantity
 async def handle_add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1420,9 +1798,11 @@ async def handle_add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if platform in service["category"]:
                 platforms[platform].append(service)
                 break
-    
-    platforms = {platform: services for platform, services in platforms.items() if services}
-    
+
+    platforms = {
+        platform: services for platform, services in platforms.items() if services
+    }
+
     keyboard = [
         [InlineKeyboardButton(platform, callback_data=f"platform_{i}")]
         for i, platform in enumerate(platforms.keys())
@@ -1432,12 +1812,15 @@ async def handle_add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
-        translate_text("🌐 Please select a social media platform: 📱", user.preferred_language),
+        translate_text(
+            "🌐 Please select a social media platform: 📱", user.preferred_language
+        ),
         reply_markup=reply_markup,
     )
 
     context.user_data["platforms"] = list(platforms.items())
     session.close()
+
 
 # Handle platform selection when adding a new order
 async def handle_platform_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1466,12 +1849,15 @@ async def handle_platform_selection(update: Update, context: ContextTypes.DEFAUL
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
-        translate_text(f"📂 Please select a category under {platform}: 📂", user.preferred_language),
+        translate_text(
+            f"📂 Please select a category under {platform}: 📂", user.preferred_language
+        ),
         reply_markup=reply_markup,
     )
 
     context.user_data["categories"] = list(categories.items())
     session.close()
+
 
 # Handle category selection when adding a new order
 async def handle_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1485,18 +1871,27 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
     platform_index = context.user_data["platform_index"]
 
     keyboard = [
-        [InlineKeyboardButton(service["name"][:60], callback_data=f"service_{service['service']}")]
+        [
+            InlineKeyboardButton(
+                service["name"][:60], callback_data=f"service_{service['service']}"
+            )
+        ]
         for service in services
     ]
     back_button = translate_text("🔙 Back", user.preferred_language)
-    keyboard.append([InlineKeyboardButton(back_button, callback_data=f"platform_{platform_index}")])
+    keyboard.append(
+        [InlineKeyboardButton(back_button, callback_data=f"platform_{platform_index}")]
+    )
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
-        translate_text(f"📄 Please select a service in {category}: 📄", user.preferred_language),
+        translate_text(
+            f"📄 Please select a service in {category}: 📄", user.preferred_language
+        ),
         reply_markup=reply_markup,
     )
     session.close()
+
 
 # Handle service selection when adding a new order
 async def handle_service_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1511,10 +1906,12 @@ async def handle_service_selection(update: Update, context: ContextTypes.DEFAULT
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("🔗 Please enter the link: 🌐", user.preferred_language),reply_markup=reply_markup
+        translate_text("🔗 Please enter the link: 🌐", user.preferred_language),
+        reply_markup=reply_markup,
     )
     context.user_data["awaiting_link"] = True
     session.close()
+
 
 # Handle viewing user's past orders and paginating through them
 async def handle_view_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1522,7 +1919,12 @@ async def handle_view_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
-    orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.timestamp.desc()).all()
+    orders = (
+        session.query(Order)
+        .filter_by(user_id=user.id)
+        .order_by(Order.timestamp.desc())
+        .all()
+    )
     orders_per_page = 10  # Number of orders to display per page
     context.user_data["total_orders"] = len(orders)
     context.user_data["current_page"] = 0
@@ -1530,34 +1932,51 @@ async def handle_view_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_orders_page(update, context, user, orders, 0)
     session.close()
 
+
 # Show orders page with pagination
-async def show_orders_page(update: Update, context: ContextTypes.DEFAULT_TYPE, user, orders, page_number):
+async def show_orders_page(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user, orders, page_number
+):
     orders_per_page = 10
     start_index = page_number * orders_per_page
     end_index = min(start_index + orders_per_page, len(orders))
 
     keyboard = [
-        [InlineKeyboardButton(f"Order ID: {order.order_id}", callback_data=f"view_order_{order.order_id}")]
+        [
+            InlineKeyboardButton(
+                f"Order ID: {order.order_id}",
+                callback_data=f"view_order_{order.order_id}",
+            )
+        ]
         for order in orders[start_index:end_index]
     ]
-  
+
     reply_markup = InlineKeyboardMarkup(keyboard)
     back_button = translate_text("🔙 Back", user.preferred_language)
-    custom_order_button = translate_text("🔍 Enter Custom Order ID", user.preferred_language)
-    keyboard.append([InlineKeyboardButton(custom_order_button, callback_data="custom_order_id")])
+    custom_order_button = translate_text(
+        "🔍 Enter Custom Order ID", user.preferred_language
+    )
+    keyboard.append(
+        [InlineKeyboardButton(custom_order_button, callback_data="custom_order_id")]
+    )
     keyboard.append([InlineKeyboardButton(back_button, callback_data=f"back")])
     if start_index > 0:
-        keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="previous_orders_page")])
+        keyboard.append(
+            [InlineKeyboardButton("⬅️ Back", callback_data="previous_orders_page")]
+        )
     if end_index < len(orders):
-        keyboard.append([InlineKeyboardButton("➡️ Next", callback_data="next_orders_page")])
+        keyboard.append(
+            [InlineKeyboardButton("➡️ Next", callback_data="next_orders_page")]
+        )
     back_button = translate_text("🔙 Back", user.preferred_language)
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.callback_query.edit_message_text(
         translate_text("📦 Your Orders:", user.preferred_language),
-        reply_markup=reply_markup
+        reply_markup=reply_markup,
     )
+
 
 # Handle pagination for orders
 async def handle_order_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1565,15 +1984,23 @@ async def handle_order_pagination(update: Update, context: ContextTypes.DEFAULT_
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
-    orders = session.query(Order).filter_by(user_id=user.id).order_by(Order.timestamp.desc()).all()
+    orders = (
+        session.query(Order)
+        .filter_by(user_id=user.id)
+        .order_by(Order.timestamp.desc())
+        .all()
+    )
 
     if query.data == "next_orders_page":
         context.user_data["current_page"] += 1
     elif query.data == "previous_orders_page":
         context.user_data["current_page"] -= 1
 
-    await show_orders_page(update, context, user, orders, context.user_data["current_page"])
+    await show_orders_page(
+        update, context, user, orders, context.user_data["current_page"]
+    )
     session.close()
+
 
 # Handle viewing the details of an individual order
 async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1583,14 +2010,16 @@ async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_
 
     order_id = query.data.split("_")[2]
     order = session.query(Order).filter_by(order_id=order_id, user_id=user.id).first()
-    
+
     if order:
         # Fetching order status and details
-        response = requests.post(API_URL, data={"key": API_KEY, "action": "status", "order": order_id})
+        response = requests.post(
+            API_URL, data={"key": API_KEY, "action": "status", "order": order_id}
+        )
         order_status = response.json()
 
-        start_count = int(float(order_status.get('start_count') or 0))
-        remains = float(order_status.get('remains', 0))
+        start_count = int(float(order_status.get("start_count") or 0))
+        remains = float(order_status.get("remains", 0))
         charge = order.quantity
         total_count = start_count + charge
 
@@ -1601,17 +2030,21 @@ async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_
 
         percentage_complete = round(percentage_complete)
 
-        battery_status = "🔋" + "▓" * math.floor(percentage_complete / 10) + "░" * (10 - math.floor(percentage_complete / 10))
+        battery_status = (
+            "🔋"
+            + "▓" * math.floor(percentage_complete / 10)
+            + "░" * (10 - math.floor(percentage_complete / 10))
+        )
         progress_message = f"{battery_status} {percentage_complete}%"
 
         status_mapping = {
             "Pending": "🟡",
             "In Progress": "🔵",
             "Completed": "🟢",
-            "Canceled": "🔴"
+            "Canceled": "🔴",
         }
 
-        status = order_status.get('status', 'Unknown')
+        status = order_status.get("status", "Unknown")
         status_emoji = status_mapping.get(status, "❓")
 
         status_message = (
@@ -1626,18 +2059,15 @@ async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_
 
         translated_message = translate_text(status_message, user.preferred_language)
 
-        keyboard = [
-            [InlineKeyboardButton("🔙 Back", callback_data="view_order")]
-        ]
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="view_order")]]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(
-            translated_message,
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
+            translated_message, reply_markup=reply_markup, parse_mode="Markdown"
         )
     session.close()
+
 
 # Handle checking order status by order ID
 async def handle_check_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1646,6 +2076,7 @@ async def handle_check_order_status(update: Update, context: ContextTypes.DEFAUL
 
     # Process the status check similar to the process_order_status function provided earlier
     await process_order_status(update, context, order_id)
+
 
 # Handle the management of unit value (conversion rate for credits)
 async def handle_manage_unit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1657,63 +2088,148 @@ async def handle_manage_unit_value(update: Update, context: ContextTypes.DEFAULT
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("💲 Please enter the unit value in dollars (e.g., 0.1): 💰", user.preferred_language),reply_markup=reply_markup
+        translate_text(
+            "💲 Please enter the unit value in dollars (e.g., 0.1): 💰",
+            user.preferred_language,
+        ),
+        reply_markup=reply_markup,
     )
     context.user_data["awaiting_unit_value"] = True
     session.close()
 
+
 # The main function that sets up the Telegram bot and all the handlers
 def main():
     application = ApplicationBuilder().token(TOKEN).build()
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_messages))
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_all_messages)
+    )
     application.add_handler(CommandHandler("start", start))
     application.add_handler(
-        CallbackQueryHandler(handle_language_selection, pattern="^(" + "|".join(languages.keys()) + ")$")
-    )
-    application.add_handler(CallbackQueryHandler(handle_account_info, pattern="^account_info$"))
-    application.add_handler(CallbackQueryHandler(handle_request_agency, pattern="^request_agency$"))
-    application.add_handler(
-        CallbackQueryHandler(handle_view_agency_requests, pattern="^view_agency_requests$")
+        CallbackQueryHandler(
+            handle_language_selection, pattern="^(" + "|".join(languages.keys()) + ")$"
+        )
     )
     application.add_handler(
-        CallbackQueryHandler(handle_agency_request_action, pattern=r"^(approve|reject)_\d+$")
+        CallbackQueryHandler(handle_account_info, pattern="^account_info$")
     )
-    application.add_handler(CallbackQueryHandler(check_channel_membership, pattern="^check_membership$"))
+    application.add_handler(
+        CallbackQueryHandler(handle_request_agency, pattern="^request_agency$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_view_agency_requests, pattern="^view_agency_requests$"
+        )
+    )
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_agency_request_action, pattern=r"^(approve|reject)_\d+$"
+        )
+    )
+    application.add_handler(
+        CallbackQueryHandler(check_channel_membership, pattern="^check_membership$")
+    )
     application.add_handler(CallbackQueryHandler(handle_back, pattern="^back$"))
     application.add_handler(CallbackQueryHandler(handle_settings, pattern="^settings$"))
-    application.add_handler(CallbackQueryHandler(handle_chance_circle, pattern="^chance_circle$"))
-    application.add_handler(CallbackQueryHandler(handle_create_ticket, pattern="^create_ticket$"))
-    application.add_handler(CallbackQueryHandler(handle_view_tickets, pattern="^view_tickets$"))
-    application.add_handler(CallbackQueryHandler(handle_view_ticket, pattern=r"^view_ticket_\d+$"))
-    application.add_handler(CallbackQueryHandler(handle_referral_link, pattern="^referral_link$"))
-    application.add_handler(CallbackQueryHandler(handle_admin_management, pattern="^admin_management$"))
-    application.add_handler(CallbackQueryHandler(handle_manage_off_codes, pattern="^manage_off_codes$"))
-    application.add_handler(CallbackQueryHandler(handle_add_off_code, pattern="^add_off_code$"))
-    application.add_handler(CallbackQueryHandler(handle_view_off_codes, pattern="^view_off_codes$"))
-    application.add_handler(CallbackQueryHandler(handle_delete_off_code, pattern="^delete_off_code$"))
-    application.add_handler(CallbackQueryHandler(handle_broadcast_message, pattern="^broadcast_message$"))
-    application.add_handler(CallbackQueryHandler(handle_broadcast_users, pattern="^broadcast_users$"))
-    application.add_handler(CallbackQueryHandler(handle_broadcast_admins, pattern="^broadcast_admins$"))
-    application.add_handler(CallbackQueryHandler(handle_increment_credit, pattern="^increment_credit$"))
-    application.add_handler(CallbackQueryHandler(handle_increment_amount_selection, pattern=r"^increment_\d+$"))
-    application.add_handler(CallbackQueryHandler(handle_manage_order, pattern="^manage_order$"))
-    application.add_handler(CallbackQueryHandler(handle_add_order, pattern="^add_order$"))
-    application.add_handler(CallbackQueryHandler(handle_view_order, pattern="^view_order$"))
-    application.add_handler(CallbackQueryHandler(handle_manage_unit_value, pattern="^manage_unit_value$"))
-    application.add_handler(CallbackQueryHandler(handle_platform_selection, pattern=r"^platform_.+$"))
-    application.add_handler(CallbackQueryHandler(handle_category_selection, pattern=r"^category_.+$"))
-    application.add_handler(CallbackQueryHandler(handle_service_selection, pattern=r"^service_.+$"))
-    application.add_handler(CallbackQueryHandler(handle_custom_increment, pattern="^custom_increment$"))
-    application.add_handler(CallbackQueryHandler(handle_individual_order, pattern=r"^view_order_\d+$"))
-    application.add_handler(CallbackQueryHandler(handle_order_pagination, pattern=r"^(next_orders_page|previous_orders_page)$"))
-    application.add_handler(CallbackQueryHandler(handle_check_order_status, pattern=r"^check_order_status_\d+$"))
+    application.add_handler(
+        CallbackQueryHandler(handle_chance_circle, pattern="^chance_circle$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_create_ticket, pattern="^create_ticket$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_view_tickets, pattern="^view_tickets$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_view_ticket, pattern=r"^view_ticket_\d+$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_referral_link, pattern="^referral_link$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_admin_management, pattern="^admin_management$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_manage_off_codes, pattern="^manage_off_codes$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_add_off_code, pattern="^add_off_code$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_view_off_codes, pattern="^view_off_codes$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_delete_off_code, pattern="^delete_off_code$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_broadcast_message, pattern="^broadcast_message$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_broadcast_users, pattern="^broadcast_users$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_broadcast_admins, pattern="^broadcast_admins$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_increment_credit, pattern="^increment_credit$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_increment_amount_selection, pattern=r"^increment_\d+$"
+        )
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_manage_order, pattern="^manage_order$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_add_order, pattern="^add_order$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_view_order, pattern="^view_order$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_manage_unit_value, pattern="^manage_unit_value$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_platform_selection, pattern=r"^platform_.+$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_category_selection, pattern=r"^category_.+$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_service_selection, pattern=r"^service_.+$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_custom_increment, pattern="^custom_increment$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_individual_order, pattern=r"^view_order_\d+$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_order_pagination,
+            pattern=r"^(next_orders_page|previous_orders_page)$",
+        )
+    )
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_check_order_status, pattern=r"^check_order_status_\d+$"
+        )
+    )
 
     # Add the new handlers here
-    application.add_handler(CallbackQueryHandler(handle_custom_order_id, pattern="^custom_order_id$"))
-    
-    application.add_handler(CallbackQueryHandler(handle_manage_conversion_rate, pattern="^manage_conversion_rate$"))
+    application.add_handler(
+        CallbackQueryHandler(handle_custom_order_id, pattern="^custom_order_id$")
+    )
+
+    application.add_handler(
+        CallbackQueryHandler(
+            handle_manage_conversion_rate, pattern="^manage_conversion_rate$"
+        )
+    )
 
     application.run_polling()
+
 
 if __name__ == "__main__":
     main()
