@@ -932,7 +932,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                     )
 
                     await update.message.reply_text(
-                        translate_text(f"💰 {total_cost_in_credits:.2f} credits have been deducted from your account. 💸",user.preferred_language),reply_markup=reply_markup
+                        translate_text(f"💰 {total_cost_in_credits:.2f} credits have been deducted from your account. 💸",user.preferred_language)
                     )
                 else:
                     await update.message.reply_text(
