@@ -36,7 +36,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String)
     first_name = Column(String)
-    last_name = Column(String)
+    last_name = Column(Integer)
     num_id = Column(Integer)
     profile_url = Column(String)
     preferred_language = Column(String)
@@ -48,9 +48,8 @@ class User(Base):
     remaining_credit = Column(Integer, default=1)
     referral_credit = Column(Integer, default=0)
     sub_transaction_earnings = Column(Integer, default=0)
-    last_chance_time = Column(
-        DateTime, default=lambda: datetime.now(timezone.utc) - timedelta(days=1)
-    )
+    last_chance_time = Column(DateTime, default=lambda: datetime.now(timezone.utc) - timedelta(days=1))
+    last_ticket_time = Column(DateTime, default=lambda: datetime.now(timezone.utc) - timedelta(minutes=10))
     referrer_id = Column(Integer, nullable=True)
 
 
@@ -93,7 +92,7 @@ class Unit(Base):
     __tablename__ = "units"
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
-    value = Column(Integer, nullable=False, default=1)  # Default value set to 1
+    value = Column(Integer, nullable=False)  # Default value set to 1
 
 
 # Order model for storing orders
@@ -194,16 +193,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def prompt_language_selection(
     update: Update, context: ContextTypes.DEFAULT_TYPE, user
 ):
+    languages = {"🇬🇧 English": "en", "🇮🇷 فارسی": "fa", "🇸🇦 العربية": "ar"}
+    
     keyboard = [
         [InlineKeyboardButton(lang, callback_data=lang)] for lang in languages.keys()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     language_prompt = (
-        "🌍 Please choose your language 🗣️ / لطفا زبان خود را انتخاب کنید: 🌐"
+        "🌍 Please choose your language 🗣️\n"
+        "لطفا زبان خود را انتخاب کنید:\n"
+        "يرجى اختيار لغتك:\n"
     )
 
     await update.message.reply_text(language_prompt, reply_markup=reply_markup)
-
 
 # Handle language selection and save the user's choice
 async def handle_language_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -238,8 +240,8 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     # Translate menu items based on user preference
     settings_button = translate_text("⚙️ Settings", user.preferred_language)
     chance_circle_button = translate_text("🎯 Chance Circle", user.preferred_language)
-    ticket_button = translate_text("🎫 Create Ticket", user.preferred_language)
-    referral_link_button = translate_text("🔗 Referral Link", user.preferred_language)
+    ticket_button = translate_text(f"🎫 {"Send ticket" if user.preferred_language == "en" else "ارسال تیکت"}", user.preferred_language)
+    referral_link_button = translate_text(f"🔗 {'Subcategory Link' if user.preferred_language == "en" else "لینک زیر مجموعه گیری" }", user.preferred_language)
     increment_credit_button = translate_text(
         "💳 Increase Credit", user.preferred_language
     )
@@ -260,14 +262,12 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
         )
         view_tickets_button = translate_text("🎟️ View Tickets", user.preferred_language)
 
-        manage_off_codes_button = translate_text(
-            "🔧 Manage Off Codes", user.preferred_language
-        )
+
         manage_unit_value_button = translate_text(
             "💲 Manage Unit Value", user.preferred_language
         )
         broadcast_button = translate_text(
-            "📢 Broadcast Message", user.preferred_language
+            "📢 Broadcast Message" if user.preferred_language == "en" else "📢 اطلاع رسانی پیام", user.preferred_language
         )
         keyboard = [
             [InlineKeyboardButton(add_order_button, callback_data="add_order")],
@@ -285,11 +285,6 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
             [
                 InlineKeyboardButton(
                     increment_credit_button, callback_data="increment_credit"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    manage_off_codes_button, callback_data="manage_off_codes"
                 )
             ],
             [
@@ -314,7 +309,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
             "ℹ️ Account Information", user.preferred_language
         )
         request_agency_button = translate_text(
-            "🏢 Request Agency", user.preferred_language
+            "🏢 Representation Request", user.preferred_language
         )
         keyboard = [
             [InlineKeyboardButton(add_order_button, callback_data="add_order")],
@@ -544,31 +539,36 @@ async def handle_account_info(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Convert referral credits to dollars and tomans
     referral_dollars = user.referral_credit / 100
     referral_toman = referral_dollars * dollar_to_toman_rate
-    referral_info = f"{referral_dollars:.2f}$ ({int(referral_toman):,} Toman)"
+    referral_info = f'{referral_dollars:.2f}$ ({int(referral_toman):,} {"Toman" if user.preferred_language == "en" else "تومان"})'
 
     # Convert sub-transaction earnings to dollars and tomans
     sub_transaction_dollars = user.sub_transaction_earnings / 100
     sub_transaction_toman = sub_transaction_dollars * dollar_to_toman_rate
     sub_transaction_info = (
-        f"{sub_transaction_dollars:.2f}$ ({int(sub_transaction_toman):,} Toman)"
+        f'{sub_transaction_dollars:.2f}$ ({int(sub_transaction_toman):,}  {"Toman" if user.preferred_language == "en" else "تومان"})'
     )
+
+    # Convert used credits to dollars and tomans
+    used_credit_dollars = user.used_credit / 100
+    used_credit_toman = used_credit_dollars * dollar_to_toman_rate
+    used_credit_info = f'{used_credit_dollars:.2f}$ ({int(used_credit_toman):,} {"Toman" if user.preferred_language == "en" else "تومان"})'
 
     # Form the account information text
     account_info_text = (
         f"ℹ️ Account Information:\n\n"
         f"📅 Membership Duration: {membership_duration} days 📅\n"
-        f"💳 Used Credit: {user.used_credit} units 💳\n"
+        f"💳 Used Credit: {used_credit_info}\n"  # Updated line
         f"💰 Remaining Credit: {credit_info}\n"
-        f"🎁 Credit from Referrals: {referral_info}\n"
-        f"💵 Earnings from Sub-transactions: {sub_transaction_info}"
-    )
+     )
 
     account_info_text = translate_text(account_info_text, user.preferred_language)
     back_button = translate_text("🔙 Back to Main Menu", user.preferred_language)
     keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(account_info_text, reply_markup=reply_markup)
+    await query.edit_message_text(account_info_text +    f"\n🎁 {"Credit from Subcategory:" if user.preferred_language == "en" else "سود حاصل از زیرمجموعه گیری:"} {referral_info}\n"
+        f"💵 {"Credit from Subcategories charge:" if user.preferred_language == "en" else "سود حاصل از شارژ زیرمجموعه ها:"} {sub_transaction_info}"
+    , reply_markup=reply_markup)
     session.close()
 
 
@@ -710,22 +710,30 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Handle the creation of support tickets
 async def handle_create_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
-    back_button = translate_text("🔙 Back", user.preferred_language)
-    keyboard = []
-    keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(
-        translate_text(
-            "🎫 Please enter the title of your ticket: 📝", user.preferred_language
-        ),
-        reply_markup=reply_markup,
-    )
-    context.user_data["awaiting_ticket_title"] = True
-    context.user_data["awaiting_ticket_description"] = False
+
+    can_send_ticket, message = check_ticket_time(user)
+
+    if can_send_ticket:
+        back_button = translate_text("🔙 Back", user.preferred_language)
+        keyboard = []
+        keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.callback_query.edit_message_text(
+            translate_text(
+                "🎫 Please enter the title of your ticket: 📝", user.preferred_language
+            ),
+            reply_markup=reply_markup,
+        )
+        context.user_data["awaiting_ticket_title"] = True
+        context.user_data["awaiting_ticket_description"] = False
+    else:
+        await update.callback_query.edit_message_text(message)
+        await show_main_menu(update, context, user)
+
     session.close()
+
 
 
 # Admin function to view open support tickets
@@ -770,6 +778,22 @@ async def handle_view_tickets(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
 
     session.close()
+def check_ticket_time(user):
+    current_time = datetime.now(timezone.utc)
+
+    if user.last_ticket_time.tzinfo is None:
+        user.last_ticket_time = user.last_ticket_time.replace(tzinfo=timezone.utc)
+
+    time_since_last_ticket = current_time - user.last_ticket_time
+
+    if time_since_last_ticket < timedelta(minutes=10):
+        remaining_time = timedelta(minutes=10) - time_since_last_ticket
+        minutes, seconds = divmod(remaining_time.seconds, 60)
+        message = f"⏳ زمان تخمینی باقیمانده : {minutes} دقیقه و {seconds} ثانیه"
+        return False, translate_text(message, user.preferred_language)
+    else:
+        message = "✍️ می‌توانید یک پیام جدید ارسال کنید"
+        return True, translate_text(message, user.preferred_language)
 
 
 # Handle viewing the details of an individual ticket
@@ -847,6 +871,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         context.user_data["awaiting_conversion_rate"] = False
         await show_main_menu(update, context, user)
+    # Handle custom credit increment input
     if context.user_data.get("awaiting_custom_increment"):
         try:
             custom_amount = float(update.message.text.strip())
@@ -863,15 +888,16 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                 return
 
             unit_value_cents = unit.value
-            credit_amount = custom_amount * (
-                100 / unit_value_cents
-            )  # Convert dollars to units
+            dollar_to_toman_rate = await get_dollar_to_toman_rate()
+            credit_amount_units = custom_amount * (100 / unit_value_cents)  # Convert dollars to units
+            credit_amount_toman = custom_amount * dollar_to_toman_rate
 
-            user.remaining_credit += credit_amount
+            user.remaining_credit += credit_amount_units
             session.commit()
 
             success_message = translate_text(
-                f"✅ {credit_amount:.2f} units have been added to your account!",
+                f"✅ {credit_amount_units:.2f} units have been added to your account!\n"
+                f"💵 Equivalent to {custom_amount:.2f} dollars and {int(credit_amount_toman):,} Toman.",
                 user.preferred_language,
             )
             await update.message.reply_text(success_message, reply_markup=reply_markup)
@@ -886,6 +912,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         context.user_data["awaiting_custom_increment"] = False
         await show_main_menu(update, context, user)
+
 
     # Broadcasting message to selected users or admins
     if context.user_data.get("awaiting_broadcast_message"):
@@ -1006,6 +1033,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             user_id=user.id, title=ticket_title, description=ticket_description
         )
         session.add(new_ticket)
+        user.last_ticket_time = datetime.now(timezone.utc)
         session.commit()
 
         await update.message.reply_text(
@@ -1046,7 +1074,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Handling custom order ID input
     elif context.user_data.get("awaiting_order_id_input"):
         order_id = update.message.text.strip()
-        print(order_id)
+        
         await process_order_status(update, context, order_id)
         context.user_data["awaiting_order_id_input"] = False
 
@@ -1061,7 +1089,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         if service:
             context.user_data["service_id"] = service_id
             await update.message.reply_text(
-                translate_text("🔗 Please enter the Link: 🌐", user.preferred_language),
+                translate_text("🔗 Please enter the Link: (\nBut Please use the right link . if you want instagram post view please give us the link of post not the link of your page) 🌐", user.preferred_language),
                 reply_markup=reply_markup,
             )
             context.user_data["awaiting_link"] = True
@@ -1076,16 +1104,59 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             context.user_data["awaiting_service_id"] = True
 
-    # Handling link input for new orders
+        # Handling link input for new orders
     elif context.user_data.get("awaiting_link"):
-        link = update.message.text.strip()
-        context.user_data["link"] = link
-        await update.message.reply_text(
-            translate_text("🔢 Please enter the Quantity: 💲", user.preferred_language),
-            reply_markup=reply_markup,
-        )
-        context.user_data["awaiting_quantity"] = True
-        context.user_data["awaiting_link"] = False
+            link = update.message.text.strip()
+            context.user_data["link"] = link
+
+            # Fetch service details from the API
+            service_id = context.user_data["selected_service_id"]
+            response = requests.post(API_URL, data={"key": API_KEY, "action": "services"})
+            services = response.json()
+            service = next((s for s in services if s["service"] == service_id), None)
+
+        
+            min_quantity = int(service["min"])
+            max_quantity = int(service["max"])
+            service_rate_per_1000 = float(service["rate"])  # Cost per 1000 units
+            unit = session.query(Unit).filter_by(name="default").first()
+            # Fetch user's balance and calculate the maximum allowable quantity
+            user_balance_units = user.remaining_credit  # User's balance in units
+            dollar_to_toman_rate = await get_dollar_to_toman_rate()  # Fetch current conversion rate
+
+            # Convert user's balance to Toman and Dollar
+            unit_value_in_toman =  (unit.value / 100 ) * dollar_to_toman_rate # Assuming 1 unit = 1000 Toman for this example
+            user_balance_toman = user_balance_units * unit_value_in_toman
+            user_balance_dollar = user_balance_toman / dollar_to_toman_rate
+
+            # Calculate the service rate in dollars
+            service_rate_per_1000_dollars = service_rate_per_1000 / dollar_to_toman_rate
+
+            max_orderable_quantity = int(user_balance_toman * 1000 / service_rate_per_1000)
+
+            # Prepare the message to send to the user with emojis
+            quantity_prompt = (
+                f"🔢 *لطفاً تعداد بازدید مورد نظر خود را وارد کنید:*\n"
+                f"💡 *بین* {min_quantity:,} *تا* {max_quantity:,} *بازدید می‌توانید انتخاب کنید.*\n\n"
+                f"💰 *موجودی حساب شما:*\n"
+                f"• {user_balance_toman:,} *تومان*\n"
+                f"• {user_balance_dollar:.2f} *دلار*\n\n"
+                f"🛒 *حداکثر تعداد سفارش بر اساس موجودی شما:* {max_orderable_quantity:,} *بازدید*\n\n"
+                f"💸 *هزینه هر 1000 بازدید:*\n"
+                f"• {service_rate_per_1000_dollars:.2f} *دلار*\n"
+                f"• {service_rate_per_1000:,} *تومان*"
+            )
+
+            await update.message.reply_text(
+                translate_text(quantity_prompt, user.preferred_language),
+                reply_markup=reply_markup,
+                parse_mode="Markdown",
+            )
+
+            context.user_data["awaiting_quantity"] = True
+            context.user_data["awaiting_link"] = False
+
+
 
     # Handling quantity input for new orders and processing the order
     elif context.user_data.get("awaiting_quantity"):
@@ -1125,6 +1196,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             if user.remaining_credit >= total_cost_in_credits:
                 user.remaining_credit -= total_cost_in_credits
+                user.used_credit += total_cost_in_credits
                 session.commit()
 
                 # Placing the order via API
@@ -1157,7 +1229,13 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
 
                     await update.message.reply_text(
                         translate_text(
-                            f"🛒 Order placed successfully!\n\n**Order ID:** `{order_id}` 📄",
+                            f"💰 {total_cost_in_credits:.2f} credits have been deducted from your account. 💸",
+                            user.preferred_language,
+                        )
+                    )
+                    await update.message.reply_text(
+                        translate_text(
+                            f"🛒 Order registered successfully!\n\n**Order ID:** `{order_id}` 📄",
                             user.preferred_language,
                         ),
                         parse_mode="Markdown",
@@ -1177,12 +1255,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                         ),
                     )
 
-                    await update.message.reply_text(
-                        translate_text(
-                            f"💰 {total_cost_in_credits:.2f} credits have been deducted from your account. 💸",
-                            user.preferred_language,
-                        )
-                    )
+
                 else:
                     await update.message.reply_text(
                         translate_text(
@@ -1213,7 +1286,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         await show_main_menu(update, context, user)
 
     # Handling custom unit value input from admin
-    elif context.user_data.get("awaiting_unit_value"):
+    if context.user_data.get("awaiting_unit_value"):
         unit_value_dollars = float(update.message.text.strip())
         unit_value_cents = int(unit_value_dollars * 100)
 
@@ -1224,7 +1297,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         else:
             new_unit = Unit(name="default", value=unit_value_cents)
             session.add(new_unit)
-
+    
         session.commit()
 
         await update.message.reply_text(
@@ -1346,19 +1419,23 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
 
     referral_link = f"https://t.me/Sultanpanel_bot?start={user.num_id}"
     referral_message = translate_text(
-        "⚡️ با سلطان پنل به راحتی رشد کنید\n\n"
-        "👁‍🗨 افزایش بازدید ویدیو های شما\n"
-        "👤 افزایش فالورهای شما\n"
-        "❤️ افزایش لایک پست های شما\n"
-        "🚀 سرعت بی نظیر سرویس ها\n"
-        "🕓 استارت انی و سریع\n"
-        "👥 زیرمجموعه گیری و دریافت هدیه\n"
-        "💯 رایگان ، سریع ، بدون آفلاینی\n"
-        "🔐 پرداخت مطمئن و 100% امن\n\n"
-        "👇🏻 همین الان وارد این ربات فوق العاده شو\n\n"
-        f"🔗 [Click here to join]({referral_link})",  # Including the referral link at the end
-        user.preferred_language,
-    )
+    "⚡️ با سلطان پنل به راحتی رشد کنید\n\n"
+    "👁‍🗨 افزایش بازدید ویدیو های شما\n"
+    "👤 افزایش فالورهای شما\n"
+    "❤️ افزایش لایک پست های شما\n"
+    "🚀 سرعت بی نظیر سرویس ها\n"
+    "🕓 استارت انی و سریع\n"
+    "👥 زیرمجموعه گیری و دریافت هدیه\n"
+    "💯 رایگان ، سریع ، بدون آفلاینی\n"
+    "🔐 پرداخت مطمئن و 100% امن\n\n"
+    "👇🏻 همین الان وارد این ربات فوق العاده شو\n\n"
+    f"🔗 {referral_link}",
+    user.preferred_language,
+)
+
+
+
+
 
     back_button = translate_text("🔙 Back", user.preferred_language)
     keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
@@ -1370,7 +1447,7 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
         photo=open("icon.jpg", "rb"),  # Assuming icon.jpeg is in the root directory
         caption=referral_message,
         reply_markup=reply_markup,
-        parse_mode="Markdown",
+        parse_mode=None,
     )
 
     session.close()
@@ -1509,13 +1586,16 @@ async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text("📢 Broadcast Message 📨", reply_markup=reply_markup)
+    await query.edit_message_text("📢 Broadcast Message" if user.preferred_language == "en" else "📢 اطلاع رسانی پیام", reply_markup=reply_markup)
     session.close()
 
 
 # Handle broadcasting messages to all users
 async def handle_broadcast_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
     back_button = translate_text("🔙 Back", user.preferred_language)
     keyboard = []
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
@@ -1529,11 +1609,15 @@ async def handle_broadcast_users(update: Update, context: ContextTypes.DEFAULT_T
     )
     context.user_data["broadcast_to"] = "users"
     context.user_data["awaiting_broadcast_message"] = True
+    session.close()
 
 
 # Handle broadcasting messages to all admins
 async def handle_broadcast_admins(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
     back_button = translate_text("🔙 Back", user.preferred_language)
     keyboard = []
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
@@ -1547,7 +1631,7 @@ async def handle_broadcast_admins(update: Update, context: ContextTypes.DEFAULT_
     )
     context.user_data["broadcast_to"] = "admins"
     context.user_data["awaiting_broadcast_message"] = True
-
+    session.close()
 
 # Handle incrementing the user's credit balance
 async def handle_increment_credit(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1609,14 +1693,19 @@ async def handle_custom_increment(update: Update, context: ContextTypes.DEFAULT_
     keyboard = []
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(
-        translate_text(
-            "💵 Please enter the amount in dollars (e.g., 15):", user.preferred_language
-        ),
-        reply_markup=reply_markup,
+
+    dollar_to_toman_rate = await get_dollar_to_toman_rate()
+
+    custom_increment_message = translate_text(
+        f"💵 Please enter the amount in dollars (e.g., 15):\n\n"
+        f"💱 Current Dollar to Toman rate: {dollar_to_toman_rate:,} Toman per Dollar",
+        user.preferred_language
     )
+
+    await query.edit_message_text(custom_increment_message, reply_markup=reply_markup)
     context.user_data["awaiting_custom_increment"] = True
     session.close()
+
 
 
 # Handle the selection of predefined credit increment amounts
@@ -1647,8 +1736,7 @@ async def handle_increment_amount_selection(
 
     unit_value_cents = unit.value
     credit_amount = amount * (100 / unit_value_cents)  # Convert dollars to units
-    print(credit_amount)
-    print(user.remaining_credit)
+
     user.remaining_credit += float(credit_amount)
     session.commit()
 
@@ -1694,7 +1782,7 @@ async def process_order_status(
 ):
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
-
+    order = session.query(Order).filter_by(order_id=order_id).first()
     response = requests.post(
         API_URL, data={"key": API_KEY, "action": "status", "order": order_id}
     )
@@ -1704,8 +1792,12 @@ async def process_order_status(
 
     remains = float(order_status.get("remains", 0))
     charge = float(order_status.get("charge", 0))
-    total_count = start_count + charge
-
+    
+    # Convert charge to Dollar
+    dollar_to_toman_rate = await get_dollar_to_toman_rate()
+    charge_dollar = charge / dollar_to_toman_rate
+    
+    total_count = start_count + order.quantity
     if total_count > 0:
         percentage_complete = ((total_count - remains) / total_count) * 100
     else:
@@ -1731,11 +1823,13 @@ async def process_order_status(
     status_emoji = status_mapping.get(status, "❓")
 
     status_message = (
+        
         f"🔍 **Order Status:**\n\n"
-        f"💵 **Charge:** {charge} units\n"
+        f"**Order id:** `{order_id}` 📄\n"
+        f"💵 **Order cost:** {charge:,.0f} Toman ({charge_dollar:,.2f} $)\n"  # Formatted values
         f"📊 **Start Count:** {start_count}\n"
         f"{progress_message}\n"
-        f"⏳ **Remains:** {remains} units\n"
+        f"⏳ **Remains:** {remains} pcs\n"
         f"{status_emoji} **Status:** {status}\n"
         f"💸 **Currency:** {order_status.get('currency', 'N/A')}"
     )
@@ -1766,6 +1860,7 @@ async def process_order_status(
     session.close()
 
 
+
 # Handle custom order ID input
 async def handle_custom_order_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1783,6 +1878,11 @@ async def handle_custom_order_id(update: Update, context: ContextTypes.DEFAULT_T
     session.close()
 
 
+
+# Function to strip emojis for filtering
+def strip_emoji(text):
+    return ''.join(c for c in text if c.isalnum() or c.isspace())
+
 # Handle adding a new order by selecting platform, service, and quantity
 async def handle_add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1791,20 +1891,18 @@ async def handle_add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     response = requests.post(API_URL, data={"key": API_KEY, "action": "services"})
     services = response.json()
-
+    
     platforms = {platform: [] for platform in SOCIAL_MEDIA_PLATFORMS}
     for service in services:
-        for platform in SOCIAL_MEDIA_PLATFORMS:
-            if platform in service["category"]:
+        for platform, platform_key in SOCIAL_MEDIA_PLATFORMS.items():
+            if platform_key in service["category"]:
                 platforms[platform].append(service)
                 break
-
-    platforms = {
-        platform: services for platform, services in platforms.items() if services
-    }
+    
+    platforms = {platform: services for platform, services in platforms.items() if services}
 
     keyboard = [
-        [InlineKeyboardButton(platform, callback_data=f"platform_{i}")]
+        [InlineKeyboardButton(translate_text(platform,user.preferred_language), callback_data=f"platform_{i}")]
         for i, platform in enumerate(platforms.keys())
     ]
     back_button = translate_text("🔙 Back", user.preferred_language)
@@ -1820,7 +1918,6 @@ async def handle_add_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["platforms"] = list(platforms.items())
     session.close()
-
 
 # Handle platform selection when adding a new order
 async def handle_platform_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1841,7 +1938,7 @@ async def handle_platform_selection(update: Update, context: ContextTypes.DEFAUL
         categories[category].append(service)
 
     keyboard = [
-        [InlineKeyboardButton(category[:60], callback_data=f"category_{i}")]
+        [InlineKeyboardButton(translate_text(category[:80],user.preferred_language), callback_data=f"category_{i}")]
         for i, category in enumerate(categories.keys())
     ]
     back_button = translate_text("🔙 Back", user.preferred_language)
@@ -1873,7 +1970,7 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
     keyboard = [
         [
             InlineKeyboardButton(
-                service["name"][:60], callback_data=f"service_{service['service']}"
+                translate_text(service["name"][:80],user.preferred_language), callback_data=f"service_{service['service']}"
             )
         ]
         for service in services
@@ -1906,7 +2003,7 @@ async def handle_service_selection(update: Update, context: ContextTypes.DEFAULT
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
-        translate_text("🔗 Please enter the link: 🌐", user.preferred_language),
+        translate_text("🔗 Please enter the Link: \n(But Please use the right link . if you want instagram post comment please give us the link of post not the link of your page) 🌐", user.preferred_language),
         reply_markup=reply_markup,
     )
     context.user_data["awaiting_link"] = True
@@ -2020,8 +2117,13 @@ async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_
 
         start_count = int(float(order_status.get("start_count") or 0))
         remains = float(order_status.get("remains", 0))
-        charge = order.quantity
-        total_count = start_count + charge
+        charge = float(order_status.get("charge", 0))
+        
+        # Convert charge to Dollar
+        dollar_to_toman_rate = await get_dollar_to_toman_rate()
+        charge_dollar = charge / dollar_to_toman_rate
+
+        total_count = start_count + order.quantity
 
         if total_count > 0:
             percentage_complete = ((total_count - remains) / total_count) * 100
@@ -2048,13 +2150,15 @@ async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_
         status_emoji = status_mapping.get(status, "❓")
 
         status_message = (
-            f"🔍 **Order Status:**\n\n"
-            f"💵 **Charge:** {charge} units\n"
-            f"📊 **Start Count:** {start_count}\n"
-            f"{progress_message}\n"
-            f"⏳ **Remains:** {remains} units\n"
-            f"{status_emoji} **Status:** {status}\n"
-            f"💸 **Currency:** {order_status.get('currency', 'N/A')}"
+        
+        f"🔍 **Order Status:**\n\n"
+        f"**Order id:** `{order_id}` 📄\n"
+        f"💵 **Order cost:** {charge:,.0f} Toman ({charge_dollar:,.2f} $)\n"  # Formatted values
+        f"📊 **Start Count:** {start_count}\n"
+        f"{progress_message}\n"
+        f"⏳ **Remains:** {remains} pcs\n"
+        f"{status_emoji} **Status:** {status}\n"
+        f"💸 **Currency:** {order_status.get('currency', 'N/A')}"
         )
 
         translated_message = translate_text(status_message, user.preferred_language)
@@ -2067,6 +2171,7 @@ async def handle_individual_order(update: Update, context: ContextTypes.DEFAULT_
             translated_message, reply_markup=reply_markup, parse_mode="Markdown"
         )
     session.close()
+
 
 
 # Handle checking order status by order ID

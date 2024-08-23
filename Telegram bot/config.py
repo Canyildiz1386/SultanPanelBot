@@ -5,12 +5,16 @@ ORDER_CHANNEL_ID = -1002207597572
 API_URL = "https://followeriha.com/api/v2"
 API_KEY = "5fa6f085fb10db47fec23f3f74eb4c97"
 admin_usernames = ["Canyildiz1386", "followergir_support"]
-SOCIAL_MEDIA_PLATFORMS = [
-    " اینستاگرام",
-    " تیک تاک",
-    " یوتیوب",
-    " توییتر",
-    " تلگرام",
-    " روبیکا"
-]
-languages = {"🇬🇧 English": "en", "🇮🇷 فارسی": "fa"}
+
+# Define the social media platforms with their respective emojis
+
+SOCIAL_MEDIA_PLATFORMS = {
+    "📸 اینستاگرام": "اینستاگرام",
+    "🎵 تیک تاک": "تیک تاک",
+    "📺 یوتیوب": "یوتیوب",
+    "🐦 توییتر": "توییتر",
+    "💬 تلگرام": "تلگرام",
+    "📱 روبیکا": "روبیکا"
+}
+languages = {"🇬🇧 English": "en", "🇮🇷 فارسی": "fa", "🇸🇦 العربية": "ar"}
+
