@@ -704,7 +704,18 @@ async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
-    await show_main_menu(update, context, user)
+
+    # Check if the callback query message exists and if it can be edited
+    if query and query.message:
+        await show_main_menu(update, context, user)
+    else:
+        # Fallback: Send a new message if editing the message isn't possible
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=translate_text("Returning to the main menu...", user.preferred_language)
+        )
+        await show_main_menu(update, context, user)
+
     session.close()
 
 
@@ -1427,6 +1438,7 @@ async def add_credit_to_user(update, context, user):
 
 
 # Handle generating and displaying the user's referral link
+# Updated function to handle referral link with improved error handling
 async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
@@ -1434,38 +1446,59 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
 
     referral_link = f"https://t.me/Sultanpanel_bot?start={user.num_id}"
     referral_message = translate_text(
-    "⚡️ با سلطان پنل به راحتی رشد کنید\n\n"
-    "👁‍🗨 افزایش بازدید ویدیو های شما\n"
-    "👤 افزایش فالورهای شما\n"
-    "❤️ افزایش لایک پست های شما\n"
-    "🚀 سرعت بی نظیر سرویس ها\n"
-    "🕓 استارت انی و سریع\n"
-    "👥 زیرمجموعه گیری و دریافت هدیه\n"
-    "💯 رایگان ، سریع ، بدون آفلاینی\n"
-    "🔐 پرداخت مطمئن و 100% امن\n\n"
-    "👇🏻 همین الان وارد این ربات فوق العاده شو\n\n"
-    f"🔗 {referral_link}",
-    user.preferred_language,
-)
-
-
-
-
+        "⚡️ با سلطان پنل به راحتی رشد کنید\n\n"
+        "👁‍🗨 افزایش بازدید ویدیو های شما\n"
+        "👤 افزایش فالورهای شما\n"
+        "❤️ افزایش لایک پست های شما\n"
+        "🚀 سرعت بی نظیر سرویس ها\n"
+        "🕓 استارت انی و سریع\n"
+        "👥 زیرمجموعه گیری و دریافت هدیه\n"
+        "💯 رایگان ، سریع ، بدون آفلاینی\n"
+        "🔐 پرداخت مطمئن و 100% امن\n\n"
+        "👇🏻 همین الان وارد این ربات فوق العاده شو\n\n"
+        f"🔗 {referral_link}",
+        user.preferred_language,
+    )
 
     back_button = translate_text("🔙 Back", user.preferred_language)
     keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Send the referral message with a back button
-    await context.bot.send_photo(
-        chat_id=query.message.chat_id,
-        photo=open("icon.jpg", "rb"),  # Assuming icon.jpeg is in the root directory
-        caption=referral_message,
-        reply_markup=reply_markup,
-        parse_mode=None,
-    )
+    # Handle the case where the message might not be editable
+    try:
+        await context.bot.send_photo(
+            chat_id=query.message.chat_id,
+            photo=open("icon.jpg", "rb"),  # Assuming icon.jpg is in the root directory
+            caption=referral_message,
+            reply_markup=reply_markup,
+            parse_mode=None,
+        )
+    except Exception as e:
+        print(f"Error sending referral link message: {e}")
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=translate_text("Sorry, something went wrong. Please try again.", user.preferred_language)
+        )
 
     session.close()
+
+# Function to handle safe message editing
+async def safe_edit_message_text(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, new_text: str, reply_markup=None
+):
+    try:
+        current_message = update.callback_query.message.text
+        if current_message != new_text:
+            await update.callback_query.message.edit_text(
+                text=new_text, reply_markup=reply_markup
+            )
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Sorry, an error occurred while updating the message.",
+            )
+            print(f"Failed to edit message: {e}")
 
 
 # Handle the admin management section, including adding and removing admins
