@@ -870,7 +870,8 @@ async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "⚠️ Invalid data received, please try again. ⚠️"
             )
             return
-
+        print(ticket_id,action)
+        print(query.data)
         ticket = session.query(Ticket).filter_by(id=ticket_id).first()
         print(ticket)
         if ticket:
