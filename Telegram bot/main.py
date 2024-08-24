@@ -566,8 +566,8 @@ async def handle_account_info(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(account_info_text +    f"\n🎁 {"Credit from Subcategory:" if user.preferred_language == "en" else "سود حاصل از زیرمجموعه گیری:"} {referral_info}\n"
-        f"💵 {"Credit from Subcategories charge:" if user.preferred_language == "en" else "سود حاصل از شارژ زیرمجموعه ها:"} {sub_transaction_info}"
+    await query.edit_message_text(account_info_text +    f'\n🎁 {"Credit from Subcategory:" if user.preferred_language == "en" else "سود حاصل از زیرمجموعه گیری:"} {referral_info}\n'
+        f'💵 {"Credit from Subcategories charge:" if user.preferred_language == "en" else "سود حاصل از شارژ زیرمجموعه ها:"} {sub_transaction_info}'
     , reply_markup=reply_markup)
     session.close()
 
