@@ -862,6 +862,7 @@ async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
     if admin:
+        print(admin)
         try:
             action, ticket_id = query.data.split("_", 1)
         except ValueError:
@@ -871,7 +872,7 @@ async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         ticket = session.query(Ticket).filter_by(id=ticket_id).first()
-
+        print(ticket)
         if ticket:
             user = session.query(User).filter_by(id=ticket.user_id).first()
             context.user_data["responding_ticket_id"] = ticket.id
@@ -2461,6 +2462,9 @@ def main():
         CallbackQueryHandler(
             handle_manage_conversion_rate, pattern="^manage_conversion_rate$"
         )
+    )
+    application.add_handler(
+        CallbackQueryHandler(handle_ticket_response, pattern="^reply_ticket$")
     )
 
     application.run_polling()
