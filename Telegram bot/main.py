@@ -240,8 +240,8 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, use
     # Translate menu items based on user preference
     settings_button = translate_text("⚙️ Settings", user.preferred_language)
     chance_circle_button = translate_text("🎯 Chance Circle", user.preferred_language)
-    ticket_button = translate_text(f"🎫 {"Send ticket" if user.preferred_language == "en" else "ارسال تیکت"}", user.preferred_language)
-    referral_link_button = translate_text(f"🔗 {'Subcategory Link' if user.preferred_language == "en" else "لینک زیر مجموعه گیری" }", user.preferred_language)
+    ticket_button = translate_text(f'🎫 {"Send ticket" if user.preferred_language == "en" else "ارسال تیکت"}', user.preferred_language)
+    referral_link_button = translate_text(f"🔗 {'Subcategory Link' if user.preferred_language == 'en' else 'لینک زیر مجموعه گیری' }", user.preferred_language)
     increment_credit_button = translate_text(
         "💳 Increase Credit", user.preferred_language
     )
