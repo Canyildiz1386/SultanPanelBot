@@ -1141,7 +1141,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                 f"💰 *موجودی حساب شما:*\n"
                 f"• {user_balance_toman:,} *تومان*\n"
                 f"• {user_balance_dollar:.2f} *دلار*\n\n"
-                f"🛒 *حداکثر تعداد سفارش بر اساس موجودی شما:* \n {max_orderable_quantity:,} *بازدید*\n\n"
+                f"🛒 *حداکثر تعداد سفارش بر اساس موجودی شما:* \n\n {max_orderable_quantity:,} *بازدید*\n\n"
                 f"💸 *هزینه هر 1000 بازدید:*\n"
                 f"• {service_rate_per_1000_dollars:.2f} *دلار*\n"
                 f"• {service_rate_per_1000:,} *تومان*"
