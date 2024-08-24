@@ -925,7 +925,7 @@ async def handle_ticket_response(update: Update, context: ContextTypes.DEFAULT_T
 
             # Ask the admin for the response message
             ask_response_message = translate_text(
-                "📝 Please enter your reply to the user:", admin.preferred_language
+                "📝 Please enter your reply to the user:", user.preferred_language
             )
             await query.edit_message_text(ask_response_message)
 
