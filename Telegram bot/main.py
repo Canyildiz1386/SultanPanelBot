@@ -870,18 +870,69 @@ async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return
 
-        ticket = session.query(Ticket).filter_by(id=ticket_id.split("_")[1]).first()
+        ticket = session.query(Ticket).filter_by(id=ticket_id).first()
 
         if ticket:
+            user = session.query(User).filter_by(id=ticket.user_id).first()
             context.user_data["responding_ticket_id"] = ticket.id
             context.user_data["awaiting_ticket_response"] = True
-            back_button = translate_text("🔙 Back", admin.preferred_language)
-            keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
+
+            # Prepare the ticket details message
+            ticket_details = (
+                f"👤 **User Details:**\n"
+                f"• Username: @{user.username if user.username else 'N/A'}\n"
+                f"• Numeric ID: {user.num_id}\n\n"
+                f"🎟️ **Ticket Details:**\n"
+                f"• Subject: {ticket.title}\n"
+                f"• Description: {ticket.description}\n\n"
+                f"📩 **Reply to this ticket:**"
+            )
+
+            # Translate the message
+            translated_ticket_details = translate_text(ticket_details, admin.preferred_language)
+            
+            # Add a button to reply to the ticket
+            keyboard = [[InlineKeyboardButton("📝 Reply", callback_data="reply_ticket")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                f"🎟️ Ticket Title: {ticket.title}\n📝 Description: {ticket.description}",
+                translated_ticket_details,
                 reply_markup=reply_markup,
+                parse_mode="Markdown",
+            )
+
+    session.close()
+
+# Handle ticket response from admin
+async def handle_ticket_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    session = Session()
+
+    admin = (
+        session.query(User)
+        .filter_by(num_id=update.effective_user.id, is_admin=True)
+        .first()
+    )
+
+    if admin and "responding_ticket_id" in context.user_data:
+        ticket_id = context.user_data["responding_ticket_id"]
+        ticket = session.query(Ticket).filter_by(id=ticket_id).first()
+
+        if ticket:
+            user = session.query(User).filter_by(id=ticket.user_id).first()
+
+            # Ask the admin for the response message
+            ask_response_message = translate_text(
+                "📝 Please enter your reply to the user:", admin.preferred_language
+            )
+            await query.edit_message_text(ask_response_message)
+
+            context.user_data["awaiting_ticket_response_text"] = True
+        else:
+            await query.edit_message_text(
+                translate_text(
+                    "⚠️ Ticket not found, please try again.", admin.preferred_language
+                )
             )
 
     session.close()
@@ -1102,9 +1153,8 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data["ticket_title"] = None
         await show_main_menu(update, context, user)
 
-    # Handling ticket response from admin
-    elif context.user_data.get("awaiting_ticket_response"):
-        response = update.message.text
+    if context.user_data.get("awaiting_ticket_response_text"):
+        response_text = update.message.text
         ticket_id = context.user_data.get("responding_ticket_id")
         ticket = session.query(Ticket).filter_by(id=ticket_id).first()
 
@@ -1112,18 +1162,22 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             user = session.query(User).filter_by(id=ticket.user_id).first()
             await context.bot.send_message(
                 chat_id=user.num_id,
-                text=f"📩 Response to your ticket '{ticket.title}':\n\n{response}",
+                text=f"📩 Response to your ticket '{ticket.title}':\n\n{response_text}",
             )
             ticket.status = "closed"
             session.commit()
 
             await update.message.reply_text(
-                "✅ The ticket has been closed and the response has been sent to the user. 📧",
-                reply_markup=reply_markup,
+                translate_text(
+                    "✅ The ticket has been closed and the response has been sent to the user. 📧",
+                    user.preferred_language,
+                )
             )
 
-        context.user_data["awaiting_ticket_response"] = False
+        context.user_data["awaiting_ticket_response_text"] = False
         await show_main_menu(update, context, user)
+
+    session.close()
 
     # Handling custom order ID input
     elif context.user_data.get("awaiting_order_id_input"):
