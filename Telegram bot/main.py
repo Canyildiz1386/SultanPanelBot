@@ -1153,7 +1153,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data["ticket_title"] = None
         await show_main_menu(update, context, user)
 
-    if context.user_data.get("awaiting_ticket_response_text"):
+    elif context.user_data.get("awaiting_ticket_response_text"):
         response_text = update.message.text
         ticket_id = context.user_data.get("responding_ticket_id")
         ticket = session.query(Ticket).filter_by(id=ticket_id).first()
@@ -1177,7 +1177,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data["awaiting_ticket_response_text"] = False
         await show_main_menu(update, context, user)
 
-    session.close()
+
 
     # Handling custom order ID input
     elif context.user_data.get("awaiting_order_id_input"):
