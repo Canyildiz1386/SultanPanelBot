@@ -1265,6 +1265,20 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                         reply_markup=reply_markup,
                     )
             else:
+                back_button = translate_text("🔙 Back", user.preferred_language)
+                increment_credit_button = translate_text(
+                "💳 Increase Credit", user.preferred_language
+                )
+                keyboard = []
+                keyboard.append([
+                    InlineKeyboardButton(
+                        increment_credit_button, callback_data="increment_credit"
+                    )
+                ])
+                keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
                 await update.message.reply_text(
                     translate_text(
                         "❌ Insufficient credit to place this order. Please add more credit and try again. ❌",
@@ -1273,6 +1287,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
                     reply_markup=reply_markup,
                 )
         else:
+
             await update.message.reply_text(
                 translate_text(
                     f"❌ Invalid quantity or service ID. Please try again. ❌",
@@ -1283,7 +1298,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         context.user_data["awaiting_quantity"] = False
         session.close()
-        await show_main_menu(update, context, user)
+
 
     # Handling custom unit value input from admin
     if context.user_data.get("awaiting_unit_value"):
