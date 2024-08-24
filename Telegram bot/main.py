@@ -871,7 +871,7 @@ async def handle_view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
             return
         print(ticket_id,action)
-        print(query.data)
+        ticket_id = ticket_id.split("_")[1]
         ticket = session.query(Ticket).filter_by(id=ticket_id).first()
         print(ticket)
         if ticket:
