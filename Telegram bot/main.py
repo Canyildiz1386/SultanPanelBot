@@ -1856,7 +1856,7 @@ async def process_order_status(
         )
 
     context.user_data["awaiting_order_id"] = False
-    await show_main_menu(update, context, user)
+
     session.close()
 
 
