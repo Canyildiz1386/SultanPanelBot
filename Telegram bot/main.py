@@ -700,21 +700,64 @@ async def handle_agency_request_action(
 
 
 # Handle the "back" action, typically returning to the main menu
+# Safely edit a message without causing Telegram errors
+async def safe_edit_message_text(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, new_text: str, reply_markup=None
+):
+    try:
+        # Check if the message is a text message
+        if update.callback_query.message.text:
+            current_message = update.callback_query.message.text
+            if current_message != new_text:
+                await update.callback_query.message.edit_text(
+                    text=new_text, reply_markup=reply_markup
+                )
+        else:
+            # If the message is not a text message, send a new message instead
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=new_text,
+                reply_markup=reply_markup
+            )
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Sorry, an error occurred while updating the message.",
+            )
+            print(f"Failed to edit message: {e}")
+
+# Updated function to handle back action properly in the referral link section
 async def handle_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
 
-    # Check if the callback query message exists and if it can be edited
-    if query and query.message:
-        await show_main_menu(update, context, user)
-    else:
-        # Fallback: Send a new message if editing the message isn't possible
+    try:
+        # Check if the callback query message exists and if it can be edited
+        if query and query.message:
+            if query.message.text:
+                await show_main_menu(update, context, user)
+            else:
+                # If the message is not text, send a new message
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text=translate_text("Returning to the main menu...", user.preferred_language)
+                )
+                await show_main_menu(update, context, user)
+        else:
+            # Fallback: Send a new message if editing the message isn't possible
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=translate_text("Returning to the main menu...", user.preferred_language)
+            )
+            await show_main_menu(update, context, user)
+    except Exception as e:
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=translate_text("Returning to the main menu...", user.preferred_language)
+            text="An error occurred. Please try again.",
         )
-        await show_main_menu(update, context, user)
+        print(f"Failed to handle back action: {e}")
 
     session.close()
 
@@ -1438,6 +1481,7 @@ async def add_credit_to_user(update, context, user):
 
 
 # Handle generating and displaying the user's referral link
+
 # Updated function to handle referral link with improved error handling
 async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1464,8 +1508,8 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = [[InlineKeyboardButton(back_button, callback_data="back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Handle the case where the message might not be editable
     try:
+        # Handle the case where the message might not be editable
         await context.bot.send_photo(
             chat_id=query.message.chat_id,
             photo=open("icon.jpg", "rb"),  # Assuming icon.jpg is in the root directory
@@ -1482,23 +1526,7 @@ async def handle_referral_link(update: Update, context: ContextTypes.DEFAULT_TYP
 
     session.close()
 
-# Function to handle safe message editing
-async def safe_edit_message_text(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, new_text: str, reply_markup=None
-):
-    try:
-        current_message = update.callback_query.message.text
-        if current_message != new_text:
-            await update.callback_query.message.edit_text(
-                text=new_text, reply_markup=reply_markup
-            )
-    except Exception as e:
-        if "Message is not modified" not in str(e):
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="Sorry, an error occurred while updating the message.",
-            )
-            print(f"Failed to edit message: {e}")
+
 
 
 # Handle the admin management section, including adding and removing admins
