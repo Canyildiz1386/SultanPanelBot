@@ -1532,8 +1532,8 @@ async def add_credit_to_user(update, context, user):
         reply_markup = InlineKeyboardMarkup(keyboard)
         if user:
             increment_amount = context.user_data["selected_increment_amount"]
-            print(increment_amount)
-            user.remaining_credit += float(increment_amount) * 100000
+            user.remaining_credit += float(increment_amount)
+            print(user.remaining_credit)
             session.commit()
 
             success_message = translate_text(
