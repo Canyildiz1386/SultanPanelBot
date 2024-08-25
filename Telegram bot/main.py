@@ -1963,6 +1963,10 @@ async def handle_custom_increment(update: Update, context: ContextTypes.DEFAULT_
         f"💱 Current Dollar to Toman rate: {dollar_to_toman_rate:,} Toman per Dollar",
         user.preferred_language
     )
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard = []
+    keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(custom_increment_message, reply_markup=reply_markup)
     context.user_data["awaiting_custom_increment"] = True
