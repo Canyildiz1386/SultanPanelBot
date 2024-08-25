@@ -1844,7 +1844,7 @@ import random
 import urllib.parse
 import hashlib
 # Flask server details (replace with your actual server address)
-FLASK_SERVER_URL = "http://your-flask-server.com"
+FLASK_SERVER_URL = "http://157.90.234.109:8000"
 
 # Perfect Money account details
 PAYEE_ACCOUNT = "U38406992"
