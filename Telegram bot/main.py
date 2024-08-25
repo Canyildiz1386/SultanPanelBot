@@ -1023,7 +1023,7 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
             credit_amount_units = custom_amount * (100 / unit_value_cents)  # Convert dollars to units
             credit_amount_toman = custom_amount * dollar_to_toman_rate
 
-            user.remaining_credit += credit_amount_units
+            user.remaining_credit += credit_amount_units * 100
             session.commit()
 
             success_message = translate_text(
@@ -1532,8 +1532,7 @@ async def add_credit_to_user(update, context, user):
         reply_markup = InlineKeyboardMarkup(keyboard)
         if user:
             increment_amount = context.user_data["selected_increment_amount"]
-            user.remaining_credit += float(increment_amount)
-            print(user.remaining_credit)
+            user.remaining_credit += (increment_amount)
             session.commit()
 
             success_message = translate_text(
