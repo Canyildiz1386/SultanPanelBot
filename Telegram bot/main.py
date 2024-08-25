@@ -949,6 +949,30 @@ async def handle_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = []
     keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
+    if context.user_data.get("awaiting_payment"):
+        transaction_id = update.message.text.strip()
+
+        # Simulate payment confirmation (here you should call the respective API to confirm the transaction)
+        payment_confirmed = True  # Replace with actual API call
+
+        if payment_confirmed:
+            await add_credit_to_user(update, context, user)
+            context.user_data["awaiting_payment"] = False
+            await update.message.reply_text(
+                translate_text(
+                    "🎉 Payment confirmed! Your credits have been added successfully. 🎊",
+                    user.preferred_language
+                ),
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(
+                translate_text(
+                    "❌ Payment confirmation failed. Please check the transaction ID and try again. ❌",
+                    user.preferred_language
+                ),
+                reply_markup=reply_markup
+            )
     if context.user_data.get("awaiting_conversion_rate"):
         try:
             new_rate = int(update.message.text.strip())
@@ -1815,16 +1839,122 @@ async def handle_increment_credit(update: Update, context: ContextTypes.DEFAULT_
     await query.edit_message_text(increment_message, reply_markup=reply_markup)
     session.close()
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+import random
+import urllib.parse
+import hashlib
+# Flask server details (replace with your actual server address)
+FLASK_SERVER_URL = "http://your-flask-server.com"
+
+# Perfect Money account details
+PAYEE_ACCOUNT = "U38406992"
+PAYEE_NAME = "Mohamed Aduham"
+PAYMENT_UNITS = "USD"
+
+# Payeer account details
+M_SHOP = "1769310266"
+M_KEY = "123"  # Using '123' as the secret key as advised
+
+def generate_perfect_money_url(payment_amount, payment_id, memo):
+    payment_url = f"{FLASK_SERVER_URL}/payment-confirmed"
+    nopayment_url = f"{FLASK_SERVER_URL}/payment-failed"
+    status_url = f"{FLASK_SERVER_URL}/payment-status"
+
+    perfect_money_url = (
+        f"https://perfectmoney.is/api/step1.asp?"
+        f"PAYEE_ACCOUNT={urllib.parse.quote(PAYEE_ACCOUNT)}&"
+        f"PAYEE_NAME={urllib.parse.quote(PAYEE_NAME)}&"
+        f"PAYMENT_UNITS={PAYMENT_UNITS}&"
+        f"PAYMENT_AMOUNT={payment_amount:.2f}&"
+        f"PAYMENT_ID={payment_id}&"
+        f"PAYMENT_URL={urllib.parse.quote(payment_url)}&"
+        f"NOPAYMENT_URL={urllib.parse.quote(nopayment_url)}&"
+        f"STATUS_URL={urllib.parse.quote(status_url)}&"
+        f"SUGGESTED_MEMO={urllib.parse.quote(memo)}"
+    )
+    return perfect_money_url
+
+def generate_payeer_url(payment_amount, payment_id, description):
+    amount = f"{payment_amount:.2f}"
+    m_curr = "USD"
+    m_desc = urllib.parse.quote(description)
+    
+    # Create the string to sign
+    m_sign_string = f"{M_SHOP}:{payment_id}:{amount}:{m_curr}:{M_KEY}"
+    
+    # Generate the signature using sha256
+    m_sign = hashlib.sha256(m_sign_string.encode('utf-8')).hexdigest().upper()
+
+    payeer_url = (
+        f"https://payeer.com/merchant/?"
+        f"m_shop={M_SHOP}&"
+        f"m_orderid={payment_id}&"
+        f"m_amount={amount}&"
+        f"m_curr={m_curr}&"
+        f"m_desc={m_desc}&"
+        f"m_sign={m_sign}&"
+        f"lang=en"
+    )
+    return payeer_url
+
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+# Handle the selection of predefined credit increment amounts
+async def handle_increment_amount_selection(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
+    query = update.callback_query
+    session = Session()
+    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
+
+    action, amount = query.data.split("_")
+    amount = float(amount)
+    payment_id = str(random.randint(100000, 999999))  # Generate a unique payment ID
+    memo = "Payment for credit increase"
+
+    # Generate the Perfect Money payment URL
+    perfect_money_url = generate_perfect_money_url(amount, payment_id, memo)
+
+    # Generate the Payeer payment URL
+    payeer_url = generate_payeer_url(amount, payment_id, memo)
+
+    # Create web app buttons for both payment methods
+    perfect_money_button = InlineKeyboardButton(
+        translate_text("💵 Pay with Perfect Money", user.preferred_language),
+        web_app=WebAppInfo(url=perfect_money_url)
+    )
+
+    payeer_button = InlineKeyboardButton(
+        translate_text("💳 Pay with Payeer", user.preferred_language),
+        web_app=WebAppInfo(url=payeer_url)
+    )
+
+    back_button = translate_text("🔙 Back", user.preferred_language)
+    keyboard = [
+        [perfect_money_button],
+        [payeer_button],
+        [InlineKeyboardButton(back_button, callback_data="back")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    payment_message = translate_text(
+        f"💳 To increase your credit by {amount:.2f} USD, please complete the payment using one of the buttons below.",
+        user.preferred_language
+    )
+
+    context.user_data["selected_increment_amount"] = amount
+    context.user_data["awaiting_payment"] = True
+    context.user_data["payment_id"] = payment_id
+
+    await query.edit_message_text(payment_message, reply_markup=reply_markup, parse_mode="Markdown")
+    session.close()
 
 # Handle custom credit increment input
 async def handle_custom_increment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     session = Session()
     user = session.query(User).filter_by(num_id=update.effective_user.id).first()
-    back_button = translate_text("🔙 Back", user.preferred_language)
-    keyboard = []
-    keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
 
     dollar_to_toman_rate = await get_dollar_to_toman_rate()
 
@@ -1838,49 +1968,6 @@ async def handle_custom_increment(update: Update, context: ContextTypes.DEFAULT_
     context.user_data["awaiting_custom_increment"] = True
     session.close()
 
-
-
-# Handle the selection of predefined credit increment amounts
-async def handle_increment_amount_selection(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    query = update.callback_query
-    session = Session()
-    user = session.query(User).filter_by(num_id=update.effective_user.id).first()
-
-    action, amount = query.data.split("_")
-    amount = float(amount)
-    back_button = translate_text("🔙 Back", user.preferred_language)
-    keyboard = []
-    keyboard.append([InlineKeyboardButton(back_button, callback_data="back")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    unit = session.query(Unit).filter_by(name="default").first()
-    if not unit:
-
-        await query.edit_message_text(
-            translate_text(
-                "❌ Unit value is not set. Please contact an admin. ❌",
-                user.preferred_language,
-            ),
-            reply_markup=reply_markup,
-        )
-        return
-
-    unit_value_cents = unit.value
-    credit_amount = amount * (100 / unit_value_cents)  # Convert dollars to units
-
-    user.remaining_credit += float(credit_amount)
-    session.commit()
-
-    success_message = translate_text(
-        f"✅ {credit_amount:.2f} units have been added to your account!",
-        user.preferred_language,
-    )
-
-    await query.edit_message_text(success_message)
-    await show_main_menu(update, context, user)
-
-    session.close()
 
 
 # Handle managing orders (adding, viewing, custom order ID input)
