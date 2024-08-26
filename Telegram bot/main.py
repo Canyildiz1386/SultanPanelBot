@@ -1919,15 +1919,15 @@ async def handle_increment_amount_selection(
     # Generate the Payeer payment URL
     payeer_url = generate_payeer_url(amount, payment_id, memo)
 
-    # Create web app buttons for both payment methods
+    # Create glass buttons for both payment methods
     perfect_money_button = InlineKeyboardButton(
         translate_text("💵 Pay with Perfect Money", user.preferred_language),
-        web_app=WebAppInfo(url=perfect_money_url)
+        url=perfect_money_url
     )
 
     payeer_button = InlineKeyboardButton(
         translate_text("💳 Pay with Payeer", user.preferred_language),
-        web_app=WebAppInfo(url=payeer_url)
+        url=payeer_url
     )
 
     back_button = translate_text("🔙 Back", user.preferred_language)
